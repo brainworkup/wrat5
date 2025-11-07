@@ -1,2 +1,6 @@
 /.quarto/
 **/*.quarto_ipynb
+.history/
+venv/
+renv/
+.Rproj.user
