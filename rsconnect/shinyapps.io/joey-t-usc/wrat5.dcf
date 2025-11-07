@@ -1,0 +1,13 @@
+name: wrat5
+title: wrat5
+username: joey-t-usc
+account: joey-t-usc
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 16000248
+bundleId: 11146734
+url: https://joey-t-usc.shinyapps.io/wrat5/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: _quarto.yml|.posit/publish/deployments/deployment-1SDL.toml|.posit/publish/deployments/renv.lock|.posit/publish/wrat5-GSU6.toml|.Rbuildignore|.Rprofile|index.qmd|requirements.txt|wrat5.code-workspace|wrat5.html|wrat5.qmd|.history|wrat5_files

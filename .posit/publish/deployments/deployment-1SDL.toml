@@ -11,8 +11,8 @@ id = '019a5f3c-eecf-24b7-f5f2-d27ef98d0707'
 dashboard_url = 'https://connect.posit.cloud/brainworkup/content/019a5f3c-eecf-24b7-f5f2-d27ef98d0707'
 direct_url = 'https://019a5f3c-eecf-24b7-f5f2-d27ef98d0707.share.connect.posit.cloud'
 logs_url = 'https://connect.posit.cloud/brainworkup/content/019a5f3c-eecf-24b7-f5f2-d27ef98d0707/history'
-deployed_at = '2025-11-07T09:19:20-08:00'
-bundle_id = '019a5f54-641d-bd9e-d43e-8b97d58e5ea8'
+deployed_at = '2025-11-07T09:22:59-08:00'
+bundle_id = '019a5f57-bae9-1b2e-f073-228c003f3600'
 files = [
   '.posit/publish/deployments/deployment-1SDL.toml',
   '.posit/publish/wrat5-GSU6.toml',

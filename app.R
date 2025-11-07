@@ -7,6 +7,7 @@ library(hablar)
 library(here)
 library(DT)
 
+# After successful install you can snapshot: renv::snapshot()
 # UPLOAD MODULE - UI
 upload_module_ui <- function(id) {
   ns <- NS(id)
