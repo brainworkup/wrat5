@@ -13,7 +13,10 @@ files = [
   '/.posit/publish/wrat5-GSU6.toml',
   '/.posit/publish/deployments/deployment-1SDL.toml',
   '/.posit/publish/deployments/renv.lock',
-  '/.posit'
+  '/.posit',
+  '/DESCRIPTION',
+  '/NAMESPACE',
+  '/README.md'
 ]
 title = 'wrat5'
 

@@ -1,0 +1,11 @@
+Package: wrat5
+Title: WRAT-5 Extract
+Version: 1.0.0
+Authors@R: person("First", "Last", email = "you@example.com", role = c("aut", "cre"))
+Description: Extract WRAT-5 data and provide utilities for analysis.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Imports:
+    shiny
+RoxygenNote: 7.3.3
