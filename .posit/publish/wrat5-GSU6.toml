@@ -10,8 +10,10 @@ files = [
   '/app.R',
   '/requirements.txt',
   '/renv.lock',
-  '/.posit/publish/wrat5-2LB0.toml',
-  '/.posit/publish/deployments/deployment-87QS.toml'
+  '/.posit/publish/wrat5-GSU6.toml',
+  '/.posit/publish/deployments/deployment-1SDL.toml',
+  '/.posit/publish/deployments/renv.lock',
+  '/.posit'
 ]
 title = 'wrat5'
 

@@ -6,16 +6,16 @@ client_version = '1.25.0'
 created_at = ''
 dismissed_at = ''
 type = 'r-shiny'
-configuration_name = 'wrat5-2LB0'
-id = '019a5f2d-7b8b-66a4-03e7-a86b2c99ff2f'
-dashboard_url = 'https://connect.posit.cloud/brainworkup/content/019a5f2d-7b8b-66a4-03e7-a86b2c99ff2f'
-direct_url = 'https://019a5f2d-7b8b-66a4-03e7-a86b2c99ff2f.share.connect.posit.cloud'
-logs_url = 'https://connect.posit.cloud/brainworkup/content/019a5f2d-7b8b-66a4-03e7-a86b2c99ff2f/history'
-deployed_at = '2025-11-07T08:40:57-08:00'
-bundle_id = '019a5f31-3fa1-c66d-735b-e098e3a19d71'
+configuration_name = 'wrat5-GSU6'
+id = '019a5f3c-eecf-24b7-f5f2-d27ef98d0707'
+dashboard_url = 'https://connect.posit.cloud/brainworkup/content/019a5f3c-eecf-24b7-f5f2-d27ef98d0707'
+direct_url = 'https://019a5f3c-eecf-24b7-f5f2-d27ef98d0707.share.connect.posit.cloud'
+logs_url = 'https://connect.posit.cloud/brainworkup/content/019a5f3c-eecf-24b7-f5f2-d27ef98d0707/history'
+deployed_at = '2025-11-07T09:01:37-08:00'
+bundle_id = '019a5f44-3378-3896-7a5d-95594f2ef0dd'
 files = [
-  '.posit/publish/deployments/deployment-87QS.toml',
-  '.posit/publish/wrat5-2LB0.toml',
+  '.posit/publish/deployments/deployment-1SDL.toml',
+  '.posit/publish/wrat5-GSU6.toml',
   'app.R',
   'renv.lock',
   'requirements.txt'
@@ -23,11 +23,6 @@ files = [
 
 [connect_cloud]
 account_name = 'brainworkup'
-
-[deployment_error]
-code = 'unknown'
-message = 'Runtime error: Unable to start the app due to a runtime error. Please check the logs for more information.'
-operation = 'publish/deployContent'
 
 [configuration]
 product_type = 'connect_cloud'
@@ -39,8 +34,10 @@ files = [
   '/app.R',
   '/requirements.txt',
   '/renv.lock',
-  '/.posit/publish/wrat5-2LB0.toml',
-  '/.posit/publish/deployments/deployment-87QS.toml'
+  '/.posit/publish/wrat5-GSU6.toml',
+  '/.posit/publish/deployments/deployment-1SDL.toml',
+  '/.posit/publish/deployments/renv.lock',
+  '/.posit'
 ]
 title = 'wrat5'
 
