@@ -1,7 +1,272 @@
 ---
-title: "wrat5"
+title: "WRAT-5 Extractor"
+format: html
+server: shiny
 ---
 
-## Quarto
+```{r}
+#| context: setup
+#| include: false
+library(shiny)
+library(tidyverse)
+library(tabulapdf) # Requires Java
+library(neuro2) # Your specific package
+library(DT)
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+# Load the lookup table globally
+# Use a relative path for portability, or ensure the file is in the same folder
+if (file.exists("~/Dropbox/neuropsych_lookup_table.csv")) {
+  lookup_table <- read.csv(
+    "~/Dropbox/neuropsych_lookup_table.csv",
+    stringsAsFactors = FALSE
+  )
+} else {
+  # Fallback if file is missing (stops app from crashing immediately)
+  lookup_table <- data.frame(test = character(), scale = character())
+}
+
+# Ensure we handle the upload size if PDFs are large
+options(shiny.maxRequestSize = 30 * 1024^2)
+```
+
+```{r}
+#| panel: sidebar
+#| label: sidebar
+
+fileInput("file", "Upload PDF File", accept = c(".pdf"))
+numericInput("pages", "Page(s) to Scan", value = 2, min = 1)
+
+hr()
+
+# Test Selection
+selectInput(
+  "test_code",
+  "Test ID (matches lookup)",
+  choices = unique(lookup_table$test),
+  selected = "wrat5"
+)
+
+hr()
+downloadButton("download_csv", "Download Clean CSV")
+```
+
+```{r}
+#| panel: fill
+#| label: fill
+
+# UI for Column Mapping (Dynamic)
+uiOutput("column_mapping_ui")
+
+# Output Table
+DTOutput("table_display")
+```
+
+```{r}
+#| label: server
+#| context: server
+
+# --- HELPER: Safe Number Parser ---
+# Handles inputs like "<40", ">100", "105*" by stripping non-numeric chars
+safe_parse <- function(x) {
+  # Remove anything that isn't a digit or a decimal point
+  clean_x <- gsub("[^0-9.]", "", as.character(x))
+  as.numeric(clean_x)
+}
+
+# 1. Extract Tables
+raw_tables <- reactive({
+  req(input$file)
+  validate(need(file.exists(input$file$datapath), "File not found"))
+
+  tables <- tabulapdf::extract_tables(
+    file = input$file$datapath,
+    pages = input$pages,
+    method = "stream",
+    output = "matrix"
+  )
+  req(length(tables) > 0)
+  tables
+})
+
+# 2. Identify Candidate Table
+candidate_table <- reactive({
+  req(raw_tables())
+
+  best_idx <- 1
+  max_matches <- 0
+
+  test_scales <- lookup_table |>
+    filter(test == input$test_code) |>
+    pull(scale)
+
+  if (length(test_scales) == 0) {
+    return(NULL)
+  }
+
+  for (i in seq_along(raw_tables())) {
+    mat <- raw_tables()[[i]]
+    matches <- sum(mat %in% test_scales)
+    if (matches > max_matches) {
+      max_matches <- matches
+      best_idx <- i
+    }
+  }
+
+  df <- as.data.frame(raw_tables()[[best_idx]], stringsAsFactors = FALSE)
+  df[] <- lapply(df, trimws)
+  df
+})
+
+# 3. UI for Column Mapping
+output$column_mapping_ui <- renderUI({
+  req(candidate_table())
+  df <- candidate_table()
+  cols <- colnames(df)
+
+  col_choices <- setNames(
+    cols,
+    lapply(cols, function(x) {
+      val_preview <- paste(head(df[[x]], 2), collapse = ", ")
+      paste0(x, " (e.g., ", val_preview, ")")
+    })
+  )
+
+  wellPanel(
+    h4("Column Mapping"),
+    fluidRow(
+      column(
+        6,
+        selectInput(
+          "col_scale",
+          "Scale Name:",
+          choices = col_choices,
+          selected = cols[1]
+        )
+      ),
+      column(
+        6,
+        selectInput(
+          "col_raw",
+          "Raw Score:",
+          choices = c("None", col_choices),
+          selected = cols[2]
+        )
+      ),
+      column(
+        6,
+        selectInput(
+          "col_score",
+          "Standard Score:",
+          choices = col_choices,
+          selected = cols[3]
+        )
+      )
+    ),
+          column(
+        6,
+        selectInput(
+          "col_ci_95",
+          "95% CI:",
+          choices = c("None", col_choices),
+          selected = cols[4]
+        ),
+
+      column(
+        6,
+        selectInput(
+          "col_percentile",
+          "Percentile (Optional):",
+          choices = c("None", col_choices),
+          selected = cols[5]
+        )
+      ) # Guessing V5
+    )
+  )
+})
+
+# 4. Process Data (The Fix)
+processed_data <- reactive({
+  req(candidate_table(), input$col_scale, input$col_score)
+
+  df <- candidate_table()
+
+  # A. Standardize Columns (Use safe_parse)
+  clean_df <- data.frame(
+    scale = df[[input$col_scale]],
+    score = safe_parse(df[[input$col_score]]),
+    stringsAsFactors = FALSE
+  )
+
+  # B. Join with Lookup (Filters garbage rows automatically)
+  relevant_lookup <- lookup_table |>
+    dplyr::filter(test == input$test_code)
+
+  joined_df <- clean_df |>
+    dplyr::left_join(
+      relevant_lookup,
+      # by = c("test" = "test", "scale" = "scale")
+      by = c("scale" = "scale")
+    )
+
+  # C. Fix "Missing Column" Errors for Neuro2
+  # We explicitly add these columns so neuro2 doesn't crash looking for them
+  final_df <- joined_df |>
+    dplyr::mutate(
+      range = NA_character_,
+      absort = NA_character_,
+      description = NA_character_,
+      result = NA_character_
+    )
+
+  # D. Apply Neuro2 Logic (Safely)
+  if (exists("gpluck_make_score_ranges", where = asNamespace("neuro2"))) {
+    # Ensure test_type exists, default to "npsych_test" if lookup missed it
+    if (!"test_type" %in% names(final_df)) {
+      final_df$test_type <- "npsych_test"
+    }
+
+    final_df <- final_df |>
+      neuro2::gpluck_make_score_ranges(test_type = "npsych_test")
+  }
+
+  # E. Final Formatting
+  final_df |>
+    select(any_of(c(
+      "test",
+      "test_name",
+      "scale",
+      "raw_score",
+      "score",
+      "ci_95",
+      "percentile",
+      "range",
+      "domain",
+      "subdomain",
+      "narrow",
+      "pass",
+      "verbal",
+      "timed",
+      "test_type",
+      "score_type",
+      "absort",
+      "description",
+      "result"
+    )))
+})
+
+# 5. Outputs
+output$table_display <- renderDT({
+  req(processed_data())
+  datatable(processed_data(), options = list(scrollX = TRUE, pageLength = 10))
+})
+
+output$download_csv <- downloadHandler(
+  filename = function() {
+    paste0(input$test_code, "_results_", Sys.Date(), ".csv")
+  },
+  content = function(file) {
+    # Use standard write.csv to support row.names argument
+    write.csv(processed_data(), file, row.names = FALSE)
+  }
+)
+```

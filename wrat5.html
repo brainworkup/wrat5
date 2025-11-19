@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>wrat5</title>
+<title>WRAT-5 Extractor</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -47,7 +47,7 @@ ul.task-list li input[type="checkbox"] {
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">wrat5</h1>
+<h1 class="title">WRAT-5 Extractor</h1>
 </div>
 
 
@@ -64,10 +64,399 @@ ul.task-list li input[type="checkbox"] {
 </header>
 
 
-<section id="quarto" class="level2">
-<h2 class="anchored" data-anchor-id="quarto">Quarto</h2>
-<p>Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <a href="https://quarto.org" class="uri">https://quarto.org</a>.</p>
-</section>
+<div class="panel-grid layout-sidebar ms-md-0 layout-sidebar-left">
+<div class="cell panel-sidebar card bg-light p-2 g-col-24 g-col-lg-7">
+<div class="cell-output-display">
+<div class="form-group shiny-input-container">
+<label class="control-label" id="file-label" for="file">Upload PDF File</label>
+<div class="input-group">
+<label class="input-group-btn input-group-prepend">
+<span class="btn btn-default btn-file">
+Browse...
+<input id="file" class="shiny-input-file" name="file" type="file" style="position: absolute !important; top: -99999px !important; left: -99999px !important;" accept=".pdf">
+</span>
+</label>
+<input type="text" class="form-control" placeholder="No file selected" readonly="readonly">
+</div>
+<div id="file_progress" class="progress active shiny-file-input-progress">
+<div class="progress-bar"></div>
+</div>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="form-group shiny-input-container">
+<label class="control-label" id="pages-label" for="pages">Page(s) to Scan</label>
+<input id="pages" type="number" class="shiny-input-number form-control" value="2" data-update-on="change" min="1">
+</div>
+</div>
+<div class="cell-output-display">
+<hr>
+</div>
+<div class="cell-output-display no-overflow-x">
+<div class="form-group shiny-input-container">
+<label class="control-label" id="test_code-label" for="test_code">Test ID (matches lookup)</label>
+<div>
+<select id="test_code" class="shiny-input-select"><option value="abas3_parent">abas3_parent</option>
+<option value="abas3_self">abas3_self</option>
+<option value="bai">bai</option>
+<option value="basc3_prs_adolescent">basc3_prs_adolescent</option>
+<option value="basc3_prs_child">basc3_prs_child</option>
+<option value="basc3_prs_preschool">basc3_prs_preschool</option>
+<option value="basc3_srp_adolescent">basc3_srp_adolescent</option>
+<option value="basc3_srp_child">basc3_srp_child</option>
+<option value="basc3_trs_adolescent">basc3_trs_adolescent</option>
+<option value="basc3_trs_child">basc3_trs_child</option>
+<option value="basc3_trs_preschool">basc3_trs_preschool</option>
+<option value="bdi2">bdi2</option>
+<option value="brown_efa_observer">brown_efa_observer</option>
+<option value="brown_efa_self">brown_efa_self</option>
+<option value="bsra4">bsra4</option>
+<option value="caars_observer">caars_observer</option>
+<option value="caars_self">caars_self</option>
+<option value="caars2_observer">caars2_observer</option>
+<option value="caars2_self">caars2_self</option>
+<option value="cars2">cars2</option>
+<option value="cars2_hf">cars2_hf</option>
+<option value="cefi_observer">cefi_observer</option>
+<option value="cefi_parent_5-18">cefi_parent_5-18</option>
+<option value="cefi_self">cefi_self</option>
+<option value="cefi_self_12-18">cefi_self_12-18</option>
+<option value="cefi_teacher_5-18">cefi_teacher_5-18</option>
+<option value="conners4_parent">conners4_parent</option>
+<option value="conners4_self">conners4_self</option>
+<option value="conners4_teacher">conners4_teacher</option>
+<option value="cvlt_child">cvlt_child</option>
+<option value="cvlt3">cvlt3</option>
+<option value="cvlt3_brief">cvlt3_brief</option>
+<option value="dct">dct</option>
+<option value="dkefs">dkefs</option>
+<option value="examiner">examiner</option>
+<option value="frsbe_observer">frsbe_observer</option>
+<option value="frsbe_self">frsbe_self</option>
+<option value="ktea3">ktea3</option>
+<option value="nab">nab</option>
+<option value="nabs">nabs</option>
+<option value="nepsy2">nepsy2</option>
+<option value="pai">pai</option>
+<option value="pai_a">pai_a</option>
+<option value="pegboard">pegboard</option>
+<option value="ppvt5">ppvt5</option>
+<option value="rbans">rbans</option>
+<option value="rds">rds</option>
+<option value="rocft">rocft</option>
+<option value="rsi">rsi</option>
+<option value="tmt">tmt</option>
+<option value="tomm">tomm</option>
+<option value="topf">topf</option>
+<option value="wais4">wais4</option>
+<option value="wais5">wais5</option>
+<option value="wasi2">wasi2</option>
+<option value="wiat4">wiat4</option>
+<option value="wisc5">wisc5</option>
+<option value="wms4">wms4</option>
+<option value="word_choice">word_choice</option>
+<option value="wppsi4">wppsi4</option>
+<option value="wrat5" selected="">wrat5</option></select>
+<script type="application/json" data-for="test_code" data-nonempty="">{"plugins":["selectize-plugin-a11y"]}</script>
+</div>
+</div>
+</div>
+<div class="cell-output-display">
+<hr>
+</div>
+<div class="cell-output-display">
+<a id="download_csv" class="btn btn-default shiny-download-link disabled" href="" target="_blank" download="" aria-disabled="true" tabindex="-1">
+<i class="fas fa-download" role="presentation" aria-label="download icon"></i>
+Download Clean CSV
+</a>
+</div>
+</div>
+<div class="panel-fill panel-grid g-col-24 g-col-lg-17 pt-3 pt-lg-0">
+<div class="g-col-24">
+<div class="cell panel-fill">
+<div class="cell-output-display no-overflow-x">
+<div id="column_mapping_ui" class="shiny-html-output"></div>
+</div>
+<div class="cell-output-display">
+<div class="datatables html-widget html-widget-output shiny-report-size html-fill-item" id="table_display" style="width:100%;height:auto;"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<p>
+<script type="application/shiny-prerendered" data-context="server-start">
+library(shiny)
+library(tidyverse)
+library(tabulapdf) # Requires Java
+library(neuro2) # Your specific package
+library(DT)
+
+# Load the lookup table globally
+# Use a relative path for portability, or ensure the file is in the same folder
+if (file.exists("~/Dropbox/neuropsych_lookup_table.csv")) {
+  lookup_table <- read.csv(
+    "~/Dropbox/neuropsych_lookup_table.csv",
+    stringsAsFactors = FALSE
+  )
+} else {
+  # Fallback if file is missing (stops app from crashing immediately)
+  lookup_table <- data.frame(test = character(), scale = character())
+}
+
+# Ensure we handle the upload size if PDFs are large
+options(shiny.maxRequestSize = 30 * 1024^2)
+</script>
+ 
+<script type="application/shiny-prerendered" data-context="server">
+# --- HELPER: Safe Number Parser ---
+# Handles inputs like "<40", ">100", "105*" by stripping non-numeric chars
+safe_parse <- function(x) {
+  # Remove anything that isn't a digit or a decimal point
+  clean_x <- gsub("[^0-9.]", "", as.character(x))
+  as.numeric(clean_x)
+}
+
+# 1. Extract Tables
+raw_tables <- reactive({
+  req(input$file)
+  validate(need(file.exists(input$file$datapath), "File not found"))
+
+  tables <- tabulapdf::extract_tables(
+    file = input$file$datapath,
+    pages = input$pages,
+    method = "stream",
+    output = "matrix"
+  )
+  req(length(tables) > 0)
+  tables
+})
+
+# 2. Identify Candidate Table
+candidate_table <- reactive({
+  req(raw_tables())
+
+  best_idx <- 1
+  max_matches <- 0
+
+  test_scales <- lookup_table |>
+    filter(test == input$test_code) |>
+    pull(scale)
+
+  if (length(test_scales) == 0) {
+    return(NULL)
+  }
+
+  for (i in seq_along(raw_tables())) {
+    mat <- raw_tables()[[i]]
+    matches <- sum(mat %in% test_scales)
+    if (matches > max_matches) {
+      max_matches <- matches
+      best_idx <- i
+    }
+  }
+
+  df <- as.data.frame(raw_tables()[[best_idx]], stringsAsFactors = FALSE)
+  df[] <- lapply(df, trimws)
+  df
+})
+
+# 3. UI for Column Mapping
+output$column_mapping_ui <- renderUI({
+  req(candidate_table())
+  df <- candidate_table()
+  cols <- colnames(df)
+
+  col_choices <- setNames(
+    cols,
+    lapply(cols, function(x) {
+      val_preview <- paste(head(df[[x]], 2), collapse = ", ")
+      paste0(x, " (e.g., ", val_preview, ")")
+    })
+  )
+
+  wellPanel(
+    h4("Column Mapping"),
+    fluidRow(
+      column(
+        6,
+        selectInput(
+          "col_scale",
+          "Scale Name:",
+          choices = col_choices,
+          selected = cols[1]
+        )
+      ),
+      column(
+        6,
+        selectInput(
+          "col_score",
+          "Standard Score:",
+          choices = col_choices,
+          selected = cols[3]
+        )
+      )
+    ),
+    fluidRow(
+      column(
+        6,
+        selectInput(
+          "col_raw",
+          "Raw Score (Optional):",
+          choices = c("None", col_choices),
+          selected = cols[2]
+        )
+      ),
+      column(
+        6,
+        selectInput(
+          "col_percentile",
+          "Percentile (Optional):",
+          choices = c("None", col_choices),
+          selected = cols[5]
+        )
+      ) # Guessing V5
+    )
+  )
+})
+
+# 4. Process Data (The Fix)
+processed_data <- reactive({
+  req(candidate_table(), input$col_scale, input$col_score)
+
+  df <- candidate_table()
+
+  # A. Standardize Columns (Use safe_parse)
+  clean_df <- data.frame(
+    scale = df[[input$col_scale]],
+    score = safe_parse(df[[input$col_score]]),
+    stringsAsFactors = FALSE
+  )
+
+  # B. Join with Lookup (Filters garbage rows automatically)
+  relevant_lookup <- lookup_table |>
+    dplyr::filter(test == input$test_code)
+
+  joined_df <- clean_df |>
+    dplyr::inner_join(
+      relevant_lookup,
+      # by = c("test" = "test", "scale" = "scale")
+      by = c("scale" = "scale")
+    )
+
+  # C. Fix "Missing Column" Errors for Neuro2
+  # We explicitly add these columns so neuro2 doesn't crash looking for them
+  final_df <- joined_df |>
+    dplyr::mutate(
+      range = NA_character_,
+      absort = NA_character_,
+      description = NA_character_,
+      result = NA_character_
+    )
+
+  # D. Apply Neuro2 Logic (Safely)
+  if (exists("gpluck_make_score_ranges", where = asNamespace("neuro2"))) {
+    # Ensure test_type exists, default to "npsych_test" if lookup missed it
+    if (!"test_type" %in% names(final_df)) {
+      final_df$test_type <- "npsych_test"
+    }
+
+    final_df <- final_df |>
+      neuro2::gpluck_make_score_ranges(test_type = "npsych_test")
+  }
+
+  # E. Final Formatting
+  final_df |>
+    select(any_of(c(
+      "test",
+      "test_name",
+      "scale",
+      "raw_score",
+      "score",
+      "ci_95",
+      "percentile",
+      "range",
+      "domain",
+      "subdomain",
+      "narrow",
+      "pass",
+      "verbal",
+      "timed",
+      "test_type",
+      "score_type",
+      "absort",
+      "description",
+      "result"
+    )))
+})
+
+# 5. Outputs
+output$table_display <- renderDT({
+  req(processed_data())
+  datatable(processed_data(), options = list(scrollX = TRUE, pageLength = 10))
+})
+
+output$download_csv <- downloadHandler(
+  filename = function() {
+    paste0(input$test_code, "_results_", Sys.Date(), ".csv")
+  },
+  content = function(file) {
+    # Use standard write.csv to support row.names argument
+    write.csv(processed_data(), file, row.names = FALSE)
+  }
+)
+</script>
+ 
+<script type="application/shiny-prerendered" data-context="server-extras">
+ojs_define <- function(..., .session = shiny::getDefaultReactiveDomain()) {
+  quos <- rlang::enquos(...)
+  vars <- rlang::list2(...)
+  nm <- names(vars)
+  if (is.null(nm)) {
+    nm <- rep_len("", length(vars))
+  }
+  mapply(
+    function(q, nm, val) {
+      # Infer name, if possible
+      if (nm == "") {
+        tryCatch(
+          {
+            nm <- rlang::as_name(q)
+          },
+          error = function(e) {
+            code <- paste(collapse = "\n", deparse(rlang::f_rhs(q)))
+            stop(
+              "ojs_define() could not create a name for the argument: ",
+              code
+            )
+          }
+        )
+      }
+      .session$output[[nm]] <- val
+      outputOptions(.session$output, nm, suspendWhenHidden = FALSE)
+      .session$sendCustomMessage("ojs-export", list(name = nm))
+      NULL
+    },
+    quos,
+    nm,
+    vars,
+    SIMPLIFY = FALSE,
+    USE.NAMES = FALSE
+  )
+  invisible()
+}
+</script>
+</p>
+<!--html_preserve-->
+<script type="application/shiny-prerendered" data-context="dependencies">
+{"type":"list","attributes":{},"value":[{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["name","version","src","meta","script","stylesheet","head","attachment","package","all_files","pkgVersion"]},"class":{"type":"character","attributes":{},"value":["html_dependency"]}},"value":[{"type":"character","attributes":{},"value":["selectize"]},{"type":"character","attributes":{},"value":["0.15.2"]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["file"]}},"value":[{"type":"character","attributes":{},"value":["www/shared/selectize"]}]},{"type":"NULL"},{"type":"character","attributes":{},"value":["js/selectize.min.js","accessibility/js/selectize-plugin-a11y.min.js"]},{"type":"character","attributes":{},"value":["css/selectize.bootstrap3.css"]},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["shiny"]},{"type":"logical","attributes":{},"value":[true]},{"type":"character","attributes":{},"value":["1.11.1"]}]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["name","version","src","meta","script","stylesheet","head","attachment","package","all_files","pkgVersion"]},"class":{"type":"character","attributes":{},"value":["html_dependency"]}},"value":[{"type":"character","attributes":{},"value":["font-awesome"]},{"type":"character","attributes":{},"value":["6.5.2"]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["file"]}},"value":[{"type":"character","attributes":{},"value":["fontawesome"]}]},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["css/all.min.css","css/v4-shims.min.css"]},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["fontawesome"]},{"type":"logical","attributes":{},"value":[true]},{"type":"character","attributes":{},"value":["0.5.3"]}]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["name","version","src","meta","script","stylesheet","head","attachment","package","all_files","pkgVersion"]},"class":{"type":"character","attributes":{},"value":["html_dependency"]}},"value":[{"type":"character","attributes":{},"value":["htmltools-fill"]},{"type":"character","attributes":{},"value":["0.5.8.1"]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["file"]}},"value":[{"type":"character","attributes":{},"value":["fill"]}]},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["fill.css"]},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["htmltools"]},{"type":"logical","attributes":{},"value":[true]},{"type":"character","attributes":{},"value":["0.5.8.1"]}]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["name","version","src","meta","script","stylesheet","head","attachment","package","all_files","pkgVersion"]},"class":{"type":"character","attributes":{},"value":["html_dependency"]}},"value":[{"type":"character","attributes":{},"value":["htmlwidgets"]},{"type":"character","attributes":{},"value":["1.6.4"]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["file"]}},"value":[{"type":"character","attributes":{},"value":["www"]}]},{"type":"NULL"},{"type":"character","attributes":{},"value":["htmlwidgets.js"]},{"type":"NULL"},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["htmlwidgets"]},{"type":"logical","attributes":{},"value":[true]},{"type":"character","attributes":{},"value":["1.6.4"]}]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["name","version","src","meta","script","stylesheet","head","attachment","package","all_files","pkgVersion"]},"class":{"type":"character","attributes":{},"value":["html_dependency"]}},"value":[{"type":"character","attributes":{},"value":["datatables-css"]},{"type":"character","attributes":{},"value":["0.0.0"]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["file"]}},"value":[{"type":"character","attributes":{},"value":["htmlwidgets/css"]}]},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["datatables-crosstalk.css"]},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["DT"]},{"type":"logical","attributes":{},"value":[true]},{"type":"character","attributes":{},"value":["0.34.0"]}]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["name","version","src","meta","script","stylesheet","head","attachment","package","all_files","pkgVersion"]},"class":{"type":"character","attributes":{},"value":["html_dependency"]}},"value":[{"type":"character","attributes":{},"value":["datatables-binding"]},{"type":"character","attributes":{},"value":["0.34.0"]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["file"]}},"value":[{"type":"character","attributes":{},"value":["htmlwidgets"]}]},{"type":"NULL"},{"type":"character","attributes":{},"value":["datatables.js"]},{"type":"NULL"},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["DT"]},{"type":"logical","attributes":{},"value":[false]},{"type":"character","attributes":{},"value":["0.34.0"]}]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["name","version","src","meta","script","stylesheet","head","attachment","package","all_files","pkgVersion"]},"class":{"type":"character","attributes":{},"value":["html_dependency"]}},"value":[{"type":"character","attributes":{},"value":["jquery"]},{"type":"character","attributes":{},"value":["3.5.1"]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["file"]}},"value":[{"type":"character","attributes":{},"value":["lib/jquery"]}]},{"type":"NULL"},{"type":"character","attributes":{},"value":["jquery.min.js"]},{"type":"NULL"},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["crosstalk"]},{"type":"logical","attributes":{},"value":[true]},{"type":"character","attributes":{},"value":["1.2.2"]}]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["name","version","src","meta","script","stylesheet","head","attachment","package","all_files","pkgVersion"]},"class":{"type":"character","attributes":{},"value":["html_dependency"]}},"value":[{"type":"character","attributes":{},"value":["crosstalk"]},{"type":"character","attributes":{},"value":["1.2.2"]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["file"]}},"value":[{"type":"character","attributes":{},"value":["www"]}]},{"type":"NULL"},{"type":"character","attributes":{},"value":["js/crosstalk.min.js"]},{"type":"character","attributes":{},"value":["css/crosstalk.min.css"]},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["crosstalk"]},{"type":"logical","attributes":{},"value":[true]},{"type":"character","attributes":{},"value":["1.2.2"]}]}]}
+</script>
+<!--/html_preserve-->
+<!--html_preserve-->
+<script type="application/shiny-prerendered" data-context="execution_dependencies">
+{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["packages"]}},"value":[{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["packages","version"]},"class":{"type":"character","attributes":{},"value":["data.frame"]},"row.names":{"type":"integer","attributes":{},"value":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118]}},"value":[{"type":"character","attributes":{},"value":["assertthat","backports","base","boot","broom","bslib","cachem","cellranger","chromote","cli","codetools","compiler","crosstalk","curl","data.table","datasets","DBI","digest","dplyr","DT","duckdb","evaluate","farver","fastmap","fontawesome","forcats","fs","generics","ggplot2","ggtext","ggthemes","glue","graphics","grDevices","grid","gridtext","gt","gtable","gtExtras","here","highcharter","hms","htmltools","htmlwidgets","httpuv","igraph","janitor","jquerylib","jsonlite","kableExtra","knitr","later","lattice","lifecycle","lubridate","magrittr","memoise","methods","mime","neuro2","otel","paletteer","parallel","pillar","pkgconfig","png","processx","promises","ps","purrr","quantmod","quarto","R6","RColorBrewer","Rcpp","readr","readxl","rematch2","renv","rJava","rlang","rlist","rmarkdown","rprojroot","rstudioapi","S7","sass","scales","shiny","snakecase","stats","stringi","stringr","svglite","systemfonts","tabulapdf","textshaping","tibble","tidyr","tidyselect","tidyverse","timechange","tools","TTR","tzdb","usethis","utils","vctrs","viridisLite","webshot2","websocket","withr","xfun","xml2","xtable","xts","yaml","zoo"]},{"type":"character","attributes":{},"value":["0.2.1","1.5.0","4.5.2","1.3-32","1.0.10","0.9.0","1.1.0","1.1.0","0.5.1","3.6.5","0.2-20","4.5.2","1.2.2","7.0.0","1.17.8","4.5.2","1.2.3","0.6.37","1.1.4","0.34.0","1.4.1","1.0.5","2.1.2","1.2.0","0.5.3","1.0.1","1.6.6","0.1.4","4.0.0","0.1.2","5.1.0","1.8.0","4.5.2","4.5.2","4.5.2","0.1.5","1.1.0","0.3.6","0.6.1","1.0.2","0.9.4","1.1.4","0.5.8.1","1.6.4","1.6.16","2.2.1","2.2.1","0.1.4","2.0.0","1.4.0","1.50","1.4.4","0.22-7","1.0.4","1.9.4","2.0.4","2.0.1","4.5.2","0.13","0.1.1.0000","0.2.0","1.6.0","4.5.2","1.11.1","2.0.3","0.1-8","3.8.6","1.5.0","1.9.1","1.2.0","0.4.28","1.5.1","2.6.1","1.1-3","1.1.0","2.1.5","1.4.5","2.1.2","1.1.5","1.0-11","1.1.6","0.4.6.2","2.30","2.1.1","0.17.1","0.2.0","0.4.10","1.4.0","1.11.1","0.11.1","4.5.2","1.8.7","1.6.0","2.2.2","1.3.1","1.0.5-5","1.0.4","3.3.0","1.3.1","1.2.1","2.0.0","0.3.0","4.5.2","0.24.4","0.5.0","3.2.1","4.5.2","0.6.5","0.4.2","0.1.2","1.4.4","3.0.2","0.54","1.4.1","1.8-4","0.14.1","2.3.10","1.8-14"]}]}]}
+</script>
+<!--/html_preserve-->
 
 </main>
 <!-- /main column -->
