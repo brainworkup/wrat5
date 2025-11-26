@@ -1,6 +1,5 @@
 ---
 title: "Neuropsych PDF Table Extractor"
-title: "Neuropsych PDF Table Extractor"
 subtitle: "Template for extracting score tables from neuropsychological test PDFs"
 format: 
   html:
@@ -266,9 +265,10 @@ DTOutput("results_table")
 
 hr()
 
-# Raw preview (collapsible)
-details(
-  summary = "Show Raw Extraction (Debug)",
+# Raw preview (collapsible) - FIXED: use tags$details instead of details()
+h4("Raw Extraction (Debug)")
+tags$details(
+  tags$summary("Click to expand raw table"),
   DTOutput("raw_table")
 )
 ```
@@ -389,7 +389,7 @@ output$column_mapping_ui <- renderUI({
             "col_raw",
             "Raw Score:",
             choices = c(none, choices),
-            selected = cols[2]
+            selected = if (length(cols) >= 2) cols[2] else "None"
           )
         ),
         column(
@@ -398,7 +398,7 @@ output$column_mapping_ui <- renderUI({
             "col_score",
             "T-Score:",
             choices = choices,
-            selected = cols[3]
+            selected = if (length(cols) >= 3) cols[3] else cols[1]
           )
         )
       ),
@@ -452,7 +452,7 @@ output$column_mapping_ui <- renderUI({
             "col_raw",
             "Raw Score:",
             choices = c(none, choices),
-            selected = cols[2]
+            selected = if (length(cols) >= 2) cols[2] else "None"
           )
         ),
         column(
@@ -461,7 +461,7 @@ output$column_mapping_ui <- renderUI({
             "col_score",
             "Scaled Score:",
             choices = choices,
-            selected = cols[3]
+            selected = if (length(cols) >= 3) cols[3] else cols[1]
           )
         )
       ),
@@ -515,7 +515,7 @@ output$column_mapping_ui <- renderUI({
             "col_raw",
             "Raw Score:",
             choices = c(none, choices),
-            selected = cols[2]
+            selected = if (length(cols) >= 2) cols[2] else "None"
           )
         ),
         column(
@@ -524,7 +524,7 @@ output$column_mapping_ui <- renderUI({
             "col_score",
             "Standard Score:",
             choices = choices,
-            selected = cols[3]
+            selected = if (length(cols) >= 3) cols[3] else cols[1]
           )
         )
       ),

@@ -1,0 +1,473 @@
+---
+title: "Neuropsych PDF Table Extractor"
+subtitle: "Template for extracting score tables from neuropsychological test PDFs"
+format: 
+  html:
+    toc: true
+    theme: cosmo
+server: shiny
+params:
+  test_code: "wrat5"
+  test_name: "WRAT-5"
+  default_page: 2
+  score_type: "standard_score"
+  test_type: "npsych_test"
+  domain: "Academic Skills"
+---
+
+```{r}
+#| context: setup
+#| include: false
+
+library(shiny)
+library(tidyverse)
+library(tabulapdf)
+library(DT)
+
+neuro2_available <- requireNamespace("neuro2", quietly = TRUE)
+if (neuro2_available) library(neuro2)
+
+options(shiny.maxRequestSize = 50 * 1024^2)
+
+# Define standard column order (matching lookup table structure)
+standard_col_order <- c(
+
+  "scale", "raw_score", "score", "ci_95", "percentile", "range",
+  "test", "test_name", "domain", "subdomain", "narrow",
+  "pass", "verbal", "timed", "test_type", "score_type",
+  "absort", "description", "result"
+)
+
+# Test configurations - matches lookup table values
+test_configs <- list(
+  wrat5 = list(
+    name = "WRAT-5",
+    domain = "Academic Skills",
+    score_type = "standard_score",
+    test_type = "npsych_test",
+    scales = c(
+      "Math Computation", "Spelling", "Word Reading",
+      "Sentence Comprehension", "Reading Composite"
+    )
+  ),
+  wrat4 = list(
+    name = "WRAT-4",
+    domain = "Academic Skills",
+    score_type = "standard_score",
+    test_type = "npsych_test",
+    scales = c(
+      "Word Reading", "Spelling", "Math Computation",
+      "Sentence Comprehension", "Reading Composite"
+    )
+  ),
+  wiat4 = list(
+    name = "WIAT-4",
+    domain = "Academic Skills",
+    score_type = "standard_score",
+    test_type = "npsych_test",
+    scales = c(
+      "Word Reading", "Pseudoword Decoding", "Reading Comprehension",
+      "Spelling", "Sentence Composition", "Math Problem Solving",
+      "Numerical Operations", "Oral Reading Fluency"
+    )
+  ),
+  cvlt3 = list(
+    name = "CVLT-3",
+    domain = "Memory",
+    score_type = "standard_score",
+    test_type = "npsych_test",
+    scales = c(
+      "Trial 1", "Trial 5", "Trials 1-5 Total", "Short Delay Free",
+      "Long Delay Free", "Recognition Hits", "False Positives"
+    )
+  ),
+  dkefs = list(
+    name = "D-KEFS",
+    domain = "Attention/Executive",
+    score_type = "scaled_score",
+    test_type = "npsych_test",
+    scales = c(
+      "Trail Making Test", "Verbal Fluency", "Design Fluency",
+      "Color-Word Interference", "Tower", "Sorting"
+    )
+  ),
+  wais5 = list(
+    name = "WAIS-5",
+    domain = "General Cognitive Ability",
+    score_type = "scaled_score",
+    test_type = "npsych_test",
+    scales = c(
+      "Vocabulary", "Similarities", "Block Design", "Matrix Reasoning",
+      "Digit Span", "Arithmetic", "Symbol Search", "Coding"
+    )
+  ),
+  wisc5 = list(
+    name = "WISC-V",
+    domain = "General Cognitive Ability",
+    score_type = "scaled_score",
+    test_type = "npsych_test",
+    scales = c(
+      "Vocabulary", "Similarities", "Block Design", "Matrix Reasoning",
+      "Figure Weights", "Digit Span", "Picture Span", "Coding", "Symbol Search"
+    )
+  ),
+  conners4_self = list(
+    name = "Conners-4 Self",
+    domain = "ADHD/Executive Function",
+    score_type = "t_score",
+    test_type = "rating_scale",
+    scales = c(
+      "Inattention/Executive Dysfunction", "Hyperactivity", "Impulsivity",
+      "Emotional Dysregulation", "Depressed Mood", "Anxious Thoughts",
+      "Schoolwork", "Peer Interactions", "Family Life",
+      "ADHD Inattentive Symptoms", "ADHD Hyperactive/Impulsive Symptoms",
+      "Total ADHD Symptoms", "Oppositional Defiant Disorder Symptoms",
+      "Conduct Disorder Symptoms", "ADHD Index"
+    )
+  ),
+  conners4_parent = list(
+    name = "Conners-4 Parent",
+    domain = "ADHD/Executive Function",
+    score_type = "t_score",
+    test_type = "rating_scale",
+    scales = c(
+      "Inattention/Executive Dysfunction", "Hyperactivity", "Impulsivity",
+      "Emotional Dysregulation", "Depressed Mood", "Anxious Thoughts",
+      "Schoolwork", "Peer Interactions", "Family Life",
+      "ADHD Inattentive Symptoms", "ADHD Hyperactive/Impulsive Symptoms",
+      "Total ADHD Symptoms", "Oppositional Defiant Disorder Symptoms",
+      "Conduct Disorder Symptoms", "ADHD Index"
+    )
+  ),
+  conners4_teacher = list(
+    name = "Conners-4 Teacher",
+    domain = "ADHD/Executive Function",
+    score_type = "t_score",
+    test_type = "rating_scale",
+    scales = c(
+      "Inattention/Executive Dysfunction", "Hyperactivity", "Impulsivity",
+      "Emotional Dysregulation", "Depressed Mood", "Anxious Thoughts",
+      "Schoolwork", "Peer Interactions", "Family Life",
+      "ADHD Inattentive Symptoms", "ADHD Hyperactive/Impulsive Symptoms",
+      "Total ADHD Symptoms", "Oppositional Defiant Disorder Symptoms",
+      "Conduct Disorder Symptoms", "ADHD Index"
+    )
+  ),
+  basc3_prs_adolescent = list(
+    name = "BASC-3 PRS Adolescent",
+    domain = "Emotional/Behavioral/Social/Personality",
+    score_type = "t_score",
+    test_type = "rating_scale",
+    scales = c(
+      "Externalizing Problems", "Hyperactivity", "Aggression", "Conduct Problems",
+      "Internalizing Problems", "Anxiety", "Depression", "Somatization",
+      "Behavioral Symptoms Index", "Atypicality", "Withdrawal", "Attention Problems",
+      "Adaptive Skills", "Adaptability", "Social Skills", "Leadership",
+      "Activities of Daily Living", "Functional Communication"
+    )
+  ),
+  basc3_prs_child = list(
+    name = "BASC-3 PRS Child",
+    domain = "Emotional/Behavioral/Social/Personality",
+    score_type = "t_score",
+    test_type = "rating_scale",
+    scales = c(
+      "Externalizing Problems", "Hyperactivity", "Aggression",
+      "Internalizing Problems", "Anxiety", "Depression", "Somatization",
+      "Behavioral Symptoms Index", "Atypicality", "Withdrawal", "Attention Problems",
+      "Adaptive Skills"
+    )
+  ),
+  pai = list(
+    name = "PAI",
+    domain = "Emotional/Behavioral/Social/Personality",
+    score_type = "t_score",
+    test_type = "rating_scale",
+    scales = c(
+      "Somatic Complaints", "Anxiety", "Anxiety-Related Disorders",
+      "Depression", "Mania", "Paranoia", "Schizophrenia",
+      "Borderline Features", "Antisocial Features"
+    )
+  )
+)
+
+# Load lookup table
+lookup_path <- "~/Dropbox/neuropsych_lookup_table.csv"
+if (file.exists(lookup_path)) {
+  lookup_table <- read.csv(lookup_path, stringsAsFactors = FALSE)
+} else {
+  lookup_table <- data.frame(
+    scale = character(), test = character(), test_name = character(),
+    domain = character(), subdomain = character(), narrow = character(),
+    pass = character(), verbal = character(), timed = character(),
+    test_type = character(), score_type = character(),
+    absort = character(), description = character(),
+    stringsAsFactors = FALSE
+  )
+}
+```
+
+## Instructions
+
+1. **Select Test** - Choose your neuropsychological test from the dropdown
+2. **Upload PDF** - Upload the test report PDF
+3. **Configure Extraction** - Select page and map columns
+4. **Download** - Export cleaned CSV for your workflow
+
+---
+
+```{r}
+#| panel: sidebar
+
+selectInput(
+  "test_code",
+  "Select Test Battery",
+  choices = names(test_configs),
+  selected = params$test_code
+)
+
+hr()
+
+fileInput("file", "Upload PDF Report", accept = c(".pdf"))
+
+numericInput("pages", "Page(s) to Scan", value = params$default_page, min = 1, max = 50)
+
+selectInput(
+  "extraction_method",
+  "Extraction Method",
+  choices = c("stream" = "stream", "lattice" = "lattice"),
+  selected = "stream"
+)
+
+hr()
+
+uiOutput("table_selector_ui")
+
+hr()
+
+actionButton("extract_btn", "Extract Tables", class = "btn-success")
+downloadButton("download_csv", "Download CSV", class = "btn-primary")
+```
+
+```{r}
+#| panel: fill
+
+uiOutput("test_info_ui")
+hr()
+verbatimTextOutput("status")
+hr()
+uiOutput("column_mapping_ui")
+hr()
+h4("Processed Data")
+DTOutput("results_table")
+hr()
+h4("Raw Extraction (Debug)")
+tags$details(
+  tags$summary("Click to expand raw table"),
+  DTOutput("raw_table")
+)
+```
+
+```{r}
+#| context: server
+
+safe_numeric <- function(x) {
+  suppressWarnings(as.numeric(gsub("[^0-9.-]", "", as.character(x))))
+}
+
+current_config <- reactive({
+  test_configs[[input$test_code]]
+})
+
+output$test_info_ui <- renderUI({
+  cfg <- current_config()
+  wellPanel(
+    h5(cfg$name),
+    tags$small(paste(
+      "Domain:", cfg$domain, "| Score Type:", cfg$score_type, 
+      "| Test Type:", cfg$test_type
+    ))
+  )
+})
+
+raw_tables <- eventReactive(input$extract_btn, {
+  req(input$file)
+  withProgress(message = "Extracting tables...", {
+    tryCatch({
+      tabulapdf::extract_tables(
+        file = input$file$datapath,
+        pages = input$pages,
+        method = input$extraction_method,
+        output = "matrix"
+      )
+    }, error = function(e) {
+      showNotification(paste("Error:", e$message), type = "error")
+      NULL
+    })
+  })
+})
+
+output$table_selector_ui <- renderUI({
+  req(raw_tables())
+  n <- length(raw_tables())
+  if (n > 1) {
+    selectInput("table_idx", paste("Table (", n, "found)"),
+                choices = seq_len(n), selected = 1)
+  }
+})
+
+selected_idx <- reactive({
+  if (!is.null(input$table_idx)) as.integer(input$table_idx) else 1
+})
+
+candidate_df <- reactive({
+  req(raw_tables())
+  df <- as.data.frame(raw_tables()[[selected_idx()]], stringsAsFactors = FALSE)
+  df[] <- lapply(df, trimws)
+  colnames(df) <- paste0("V", seq_len(ncol(df)))
+  df
+})
+
+output$column_mapping_ui <- renderUI({
+  req(candidate_df())
+  df <- candidate_df()
+  cols <- colnames(df)
+  
+  make_choices <- function(cols, df) {
+    setNames(cols, sapply(cols, function(c) {
+      preview <- paste(head(na.omit(df[[c]]), 2), collapse = ", ")
+      paste0(c, " (", substr(preview, 1, 30), "...)")
+    }))
+  }
+  
+  choices <- make_choices(cols, df)
+  none <- c("None" = "None")
+  cfg <- current_config()
+  
+  # Score label based on type
+  score_label <- switch(cfg$score_type,
+    "t_score" = "T-Score:",
+    "scaled_score" = "Scaled Score:",
+    "Standard Score:"
+  )
+  
+  wellPanel(
+    h5("Column Mapping"),
+    fluidRow(
+      column(4, selectInput("col_scale", "Scale:", choices = choices, selected = cols[1])),
+      column(4, selectInput("col_raw", "Raw Score:", choices = c(none, choices),
+                            selected = if (length(cols) >= 2) cols[2] else "None")),
+      column(4, selectInput("col_score", score_label, choices = choices,
+                            selected = if (length(cols) >= 3) cols[3] else cols[1]))
+    ),
+    fluidRow(
+      column(4, selectInput("col_ci", "95% CI:", choices = c(none, choices), selected = "None")),
+      column(4, selectInput("col_percentile", "Percentile:", choices = c(none, choices), selected = "None")),
+      column(4, selectInput("col_range", "Range/Category:", choices = c(none, choices), selected = "None"))
+    ),
+    if (cfg$score_type == "standard_score") {
+      fluidRow(
+        column(4, selectInput("col_grade", "Grade Equiv:", choices = c(none, choices), selected = "None")),
+        column(4, selectInput("col_gsv", "GSV:", choices = c(none, choices), selected = "None")),
+        column(4)
+      )
+    }
+  )
+})
+
+processed_data <- reactive({
+  req(candidate_df(), input$col_scale, input$col_score)
+  
+  df <- candidate_df()
+  cfg <- current_config()
+  
+  result <- data.frame(
+    scale = trimws(df[[input$col_scale]]),
+    score = safe_numeric(df[[input$col_score]]),
+    stringsAsFactors = FALSE
+  )
+  
+  # Add optional columns
+  if (!is.null(input$col_raw) && input$col_raw != "None") {
+    result$raw_score <- safe_numeric(df[[input$col_raw]])
+  }
+  if (!is.null(input$col_ci) && input$col_ci != "None") {
+    result$ci_95 <- gsub("–|—", "-", trimws(df[[input$col_ci]]))
+  }
+  if (!is.null(input$col_percentile) && input$col_percentile != "None") {
+    result$percentile <- safe_numeric(df[[input$col_percentile]])
+  }
+  if (!is.null(input$col_range) && input$col_range != "None") {
+    result$range <- trimws(df[[input$col_range]])
+  }
+  if (!is.null(input$col_grade) && input$col_grade != "None") {
+    result$grade_equiv <- trimws(df[[input$col_grade]])
+  }
+  if (!is.null(input$col_gsv) && input$col_gsv != "None") {
+    result$gsv <- safe_numeric(df[[input$col_gsv]])
+  }
+  
+  # Filter valid rows
+  result <- result |>
+    dplyr::filter(!is.na(scale), scale != "", !is.na(score))
+  
+  # Add metadata
+  result <- result |>
+    dplyr::mutate(
+      test = input$test_code,
+      test_name = cfg$name,
+      domain = cfg$domain,
+      test_type = cfg$test_type,
+      score_type = cfg$score_type
+    )
+  
+  # Join with lookup table for subdomain, narrow, pass, verbal, timed, absort, description
+  if (nrow(lookup_table) > 0 && input$test_code %in% lookup_table$test) {
+    lookup_cols <- lookup_table |>
+      dplyr::filter(test == input$test_code) |>
+      dplyr::select(scale, subdomain, narrow, pass, verbal, timed, absort, description) |>
+      dplyr::distinct()
+    
+    if (nrow(lookup_cols) > 0) {
+      result <- result |>
+        dplyr::left_join(lookup_cols, by = "scale")
+    }
+  }
+  
+  # Ensure all standard columns exist
+  for (col in c("subdomain", "narrow", "pass", "verbal", "timed", "absort", "description", "result")) {
+    if (!col %in% names(result)) result[[col]] <- NA_character_
+  }
+  
+  # Apply neuro2 ranges if available
+  if (neuro2_available && exists("gpluck_make_score_ranges", where = asNamespace("neuro2"))) {
+    result <- neuro2::gpluck_make_score_ranges(result, test_type = cfg$test_type)
+  }
+  
+  # Reorder columns to standard order
+  result |>
+    dplyr::select(any_of(standard_col_order))
+})
+
+output$status <- renderText({
+  if (is.null(raw_tables())) return("Click 'Extract Tables' after uploading PDF")
+  paste0("✓ ", length(raw_tables()), " table(s) | ", nrow(processed_data()), " records processed")
+})
+
+output$raw_table <- renderDT({
+  req(candidate_df())
+  datatable(candidate_df(), options = list(scrollX = TRUE, pageLength = 5))
+})
+
+output$results_table <- renderDT({
+  req(processed_data())
+  datatable(processed_data(), 
+            options = list(scrollX = TRUE, pageLength = 10, dom = 'Bfrtip', buttons = c('copy', 'csv')),
+            extensions = 'Buttons')
+})
+
+output$download_csv <- downloadHandler(
+  filename = function() paste0(input$test_code, "_", Sys.Date(), ".csv"),
+  content = function(file) write.csv(processed_data(), file, row.names = FALSE, na = "")
+)
+```

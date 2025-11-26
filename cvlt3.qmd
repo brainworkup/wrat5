@@ -1,0 +1,737 @@
+---
+title: "CVLT-3 Score Extractor"
+subtitle: "Extract tables from CVLT-3 Brief and CVLT-3 Full PDFs"
+format: 
+  html:
+    toc: true
+    theme: cosmo
+server: shiny
+---
+
+```{r}
+#| context: setup
+#| include: false
+
+library(shiny)
+library(tidyverse)
+library(tabulapdf)
+library(DT)
+
+neuro2_available <- requireNamespace("neuro2", quietly = TRUE)
+if (neuro2_available) {
+  library(neuro2)
+}
+
+options(shiny.maxRequestSize = 50 * 1024^2)
+
+# Standard column order
+standard_col_order <- c(
+  "scale",
+  "raw_score",
+  "score",
+  "ci_95",
+  "percentile",
+  "range",
+  "test",
+  "test_name",
+  "domain",
+  "subdomain",
+  "narrow",
+  "pass",
+  "verbal",
+  "timed",
+  "test_type",
+  "score_type",
+  "absort",
+  "description",
+  "result"
+)
+
+# Scale definitions for CVLT-3 Brief (from lookup table)
+cvlt3_brief_scales <- list(
+  # Table 1: Learning Trials
+  learning = c(
+    "Trial 1 Correct",
+    "Trial 2 Correct",
+    "Trial 3 Correct",
+    "Trial 4 Correct"
+  ),
+  # Table 2: Immediate Recall Total
+  immediate = c("Trials 1-4 Correct"),
+  # Table 3: Delayed Recall
+  delayed = c(
+    "Short Delay Free Recall",
+    "Long Delay Free Recall",
+    "Long Delay Cued Recall"
+  ),
+  # Table 4: Recognition
+  recognition = c(
+    "Total Hits",
+    "Total False Positives",
+    "Recognition Discriminability (d')",
+    "Recognition Discriminability Nonparametric"
+  ),
+  # Table 5: Intrusions
+  intrusions = c("Total Intrusions"),
+  # Table 6: Repetitions
+  repetitions = c("Total Repetitions"),
+  # Table 7: Forced-Choice (Validity)
+  forced_choice = c("CVLT-3 Forced-Choice Recognition Hits")
+)
+
+# Scale definitions for CVLT-3 Full
+cvlt3_full_scales <- list(
+  learning = c(
+    "Trial 1 Correct",
+    "Trial 2 Correct",
+    "Trial 3 Correct",
+    "Trial 4 Correct",
+    "Trial 5 Correct",
+    "List B Correct"
+  ),
+  immediate = c("Trials 1-5 Correct"),
+  delayed = c(
+    "Short Delay Free Recall",
+    "Short Delay Cued Recall",
+    "Long Delay Free Recall",
+    "Long Delay Cued Recall"
+  ),
+  recognition = c(
+    "Total Hits",
+    "Total False Positives",
+    "Recognition Discriminability (d')",
+    "Recognition Discriminability Nonparametric"
+  ),
+  intrusions = c("Total Intrusions"),
+  repetitions = c("Total Repetitions"),
+  forced_choice = c("CVLT-3 Forced-Choice Recognition Hits")
+)
+
+# Predefined extraction areas (from Rmd file)
+cvlt3_brief_areas <- list(
+  c(166, 52, 237, 560), # Table 1: Learning Trials
+  c(159, 52, 185, 560), # Table 2: Immediate Recall
+  c(289, 52, 343, 560), # Table 3: Delayed Recall
+  c(397, 52, 467, 560), # Table 4: Recognition
+  c(520, 52, 544, 560), # Table 5: Intrusions
+  c(273, 52, 296, 560), # Table 6: Repetitions
+  c(597, 52, 619, 459) # Table 7: Forced-Choice
+)
+
+cvlt3_full_areas <- list(
+  c(166, 52, 265, 560), # Table 1
+  c(159, 52, 185, 560), # Table 2
+  c(320, 52, 390, 560), # Table 3
+  c(445, 52, 514, 560), # Table 4
+  c(571, 52, 590, 560), # Table 5
+  c(570, 52, 589, 560), # Table 6
+  c(646, 52, 665, 460) # Table 7
+)
+
+# Default pages for each table
+cvlt3_brief_pages <- c(13, 15, 13, 13, 13, 16, 13)
+cvlt3_full_pages <- c(18, 20, 18, 18, 18, 22, 18)
+
+# Load lookup table
+lookup_path <- "~/Dropbox/neuropsych_lookup_table.csv"
+if (file.exists(lookup_path)) {
+  lookup_table <- read.csv(lookup_path, stringsAsFactors = FALSE) |>
+    dplyr::filter(grepl("cvlt3", test))
+} else {
+  lookup_table <- NULL
+}
+
+# Scale name normalization (Rmd names -> Lookup names)
+normalize_scale_name <- function(scale_name) {
+  # Add "Correct" suffix for delayed recall scales if missing
+  if (grepl("Delay.*Recall$", scale_name) && !grepl("Correct$", scale_name)) {
+    return(paste0(scale_name, " Correct"))
+  }
+  scale_name
+}
+```
+
+## CVLT-3 / CVLT-3 Brief Memory Test
+
+This extractor handles the multi-table structure of CVLT-3 reports:
+
+- **Tables 1-6**: Learning trials, immediate/delayed recall, recognition, errors (scaled scores)
+- **Table 7**: Forced-choice recognition (validity indicator, raw score)
+
+---
+
+```{r}
+#| panel: sidebar
+
+selectInput(
+  "test_version",
+  "Test Version",
+  choices = c("CVLT-3 Brief" = "cvlt3_brief", "CVLT-3 Full" = "cvlt3"),
+  selected = "cvlt3_brief"
+)
+
+hr()
+fileInput("file", "Upload CVLT-3 PDF", accept = ".pdf")
+
+hr()
+h5("Page Numbers for Each Table")
+helpText("Adjust pages based on your PDF layout")
+
+fluidRow(
+  column(6, numericInput("page1", "Learning Trials:", value = 13, min = 1)),
+  column(6, numericInput("page2", "Immediate Recall:", value = 15, min = 1))
+)
+fluidRow(
+  column(6, numericInput("page3", "Delayed Recall:", value = 13, min = 1)),
+  column(6, numericInput("page4", "Recognition:", value = 13, min = 1))
+)
+fluidRow(
+  column(6, numericInput("page5", "Intrusions:", value = 13, min = 1)),
+  column(6, numericInput("page6", "Repetitions:", value = 16, min = 1))
+)
+numericInput("page7", "Forced-Choice:", value = 13, min = 1)
+
+hr()
+checkboxInput("use_areas", "Use predefined areas", value = TRUE)
+selectInput(
+  "method",
+  "Extraction Method",
+  choices = c("stream", "lattice"),
+  selected = "stream"
+)
+
+hr()
+actionButton("extract_btn", "Extract All Tables", class = "btn-success btn-lg")
+downloadButton("download_csv", "Download CSV", class = "btn-primary")
+```
+
+```{r}
+#| panel: fill
+
+uiOutput("version_info_ui")
+hr()
+verbatimTextOutput("status")
+hr()
+
+tabsetPanel(
+  id = "table_tabs",
+  tabPanel("1: Learning", uiOutput("mapping1_ui"), DTOutput("table1_preview")),
+  tabPanel("2: Immediate", uiOutput("mapping2_ui"), DTOutput("table2_preview")),
+  tabPanel("3: Delayed", uiOutput("mapping3_ui"), DTOutput("table3_preview")),
+  tabPanel(
+    "4: Recognition",
+    uiOutput("mapping4_ui"),
+    DTOutput("table4_preview")
+  ),
+  tabPanel(
+    "5: Intrusions",
+    uiOutput("mapping5_ui"),
+    DTOutput("table5_preview")
+  ),
+  tabPanel(
+    "6: Repetitions",
+    uiOutput("mapping6_ui"),
+    DTOutput("table6_preview")
+  ),
+  tabPanel(
+    "7: Forced-Choice",
+    uiOutput("mapping7_ui"),
+    DTOutput("table7_preview")
+  ),
+  tabPanel("Combined Output", DTOutput("combined_table"))
+)
+```
+
+```{r}
+#| context: server
+
+safe_numeric <- function(x) {
+  suppressWarnings(as.numeric(gsub("[^0-9.-]", "", as.character(x))))
+}
+
+# Get current test config
+current_scales <- reactive({
+  if (input$test_version == "cvlt3_brief") {
+    cvlt3_brief_scales
+  } else {
+    cvlt3_full_scales
+  }
+})
+
+current_areas <- reactive({
+  if (input$test_version == "cvlt3_brief") {
+    cvlt3_brief_areas
+  } else {
+    cvlt3_full_areas
+  }
+})
+
+get_test_name <- reactive({
+  if (input$test_version == "cvlt3_brief") "CVLT-3 Brief" else "CVLT-3"
+})
+
+output$version_info_ui <- renderUI({
+  wellPanel(
+    h5(get_test_name()),
+    tags$small(
+      "Domain: Memory | Score Type: Scaled Score | Test Type: npsych_test"
+    ),
+    tags$br(),
+    tags$small(
+      "Table 7 (Forced-Choice) is a validity indicator with raw scores"
+    )
+  )
+})
+
+# Get pages as vector
+get_pages <- reactive({
+  c(
+    input$page1,
+    input$page2,
+    input$page3,
+    input$page4,
+    input$page5,
+    input$page6,
+    input$page7
+  )
+})
+
+# Extract all tables
+extracted_tables <- eventReactive(input$extract_btn, {
+  req(input$file)
+
+  pages <- get_pages()
+  areas <- current_areas()
+
+  withProgress(message = "Extracting 7 tables...", value = 0, {
+    tables <- list()
+
+    for (i in 1:7) {
+      incProgress(1 / 7, detail = paste("Table", i))
+
+      tryCatch(
+        {
+          if (input$use_areas) {
+            # Use predefined areas
+            result <- tabulapdf::extract_tables(
+              file = input$file$datapath,
+              pages = pages[i],
+              area = list(areas[[i]]),
+              method = input$method,
+              guess = FALSE,
+              output = "matrix"
+            )
+          } else {
+            # Auto-detect
+            result <- tabulapdf::extract_tables(
+              file = input$file$datapath,
+              pages = pages[i],
+              method = input$method,
+              guess = TRUE,
+              output = "matrix"
+            )
+          }
+
+          if (length(result) > 0) {
+            df <- as.data.frame(result[[1]], stringsAsFactors = FALSE)
+            df[] <- lapply(df, trimws)
+            colnames(df) <- paste0("V", seq_len(ncol(df)))
+            tables[[i]] <- df
+          } else {
+            tables[[i]] <- NULL
+          }
+        },
+        error = function(e) {
+          tables[[i]] <- NULL
+        }
+      )
+    }
+
+    tables
+  })
+})
+
+# Create mapping UI for each table
+create_mapping_ui <- function(table_num, scales, is_forced_choice = FALSE) {
+  renderUI({
+    tables <- extracted_tables()
+    req(tables)
+
+    df <- tables[[table_num]]
+    if (is.null(df)) {
+      return(helpText(paste("No data extracted for Table", table_num)))
+    }
+
+    cols <- colnames(df)
+    make_choices <- function(cols, df) {
+      setNames(
+        cols,
+        sapply(cols, function(c) {
+          preview <- paste(head(na.omit(df[[c]]), 2), collapse = ", ")
+          paste0(c, " (", substr(preview, 1, 20), ")")
+        })
+      )
+    }
+    choices <- make_choices(cols, df)
+    none <- c("None" = "None")
+
+    if (is_forced_choice) {
+      # Table 7: raw_score, base_rate columns
+      wellPanel(
+        h6(paste("Table", table_num, "Mapping")),
+        fluidRow(
+          column(
+            4,
+            selectInput(
+              paste0("col_raw_", table_num),
+              "Raw Score:",
+              choices = c(none, choices),
+              selected = if (length(cols) >= 2) cols[2] else "None"
+            )
+          ),
+          column(
+            4,
+            selectInput(
+              paste0("col_base_", table_num),
+              "Base Rate:",
+              choices = c(none, choices),
+              selected = if (length(cols) >= 3) cols[3] else "None"
+            )
+          )
+        ),
+        helpText(paste("Expected scales:", paste(scales, collapse = ", ")))
+      )
+    } else {
+      # Tables 1-6: raw_score, score, percentile
+      wellPanel(
+        h6(paste("Table", table_num, "Mapping")),
+        fluidRow(
+          column(
+            3,
+            selectInput(
+              paste0("col_raw_", table_num),
+              "Raw Score:",
+              choices = c(none, choices),
+              selected = if (length(cols) >= 2) cols[2] else "None"
+            )
+          ),
+          column(
+            3,
+            selectInput(
+              paste0("col_score_", table_num),
+              "Scaled Score:",
+              choices = c(none, choices),
+              selected = if (length(cols) >= 3) cols[3] else "None"
+            )
+          ),
+          column(
+            3,
+            selectInput(
+              paste0("col_pct_", table_num),
+              "Percentile:",
+              choices = c(none, choices),
+              selected = if (length(cols) >= 4) cols[4] else "None"
+            )
+          )
+        ),
+        helpText(paste("Expected scales:", paste(scales, collapse = ", ")))
+      )
+    }
+  })
+}
+
+# Generate mapping UIs
+output$mapping1_ui <- create_mapping_ui(1, current_scales()$learning)
+output$mapping2_ui <- create_mapping_ui(2, current_scales()$immediate)
+output$mapping3_ui <- create_mapping_ui(3, current_scales()$delayed)
+output$mapping4_ui <- create_mapping_ui(4, current_scales()$recognition)
+output$mapping5_ui <- create_mapping_ui(5, current_scales()$intrusions)
+output$mapping6_ui <- create_mapping_ui(6, current_scales()$repetitions)
+output$mapping7_ui <- create_mapping_ui(
+  7,
+  current_scales()$forced_choice,
+  is_forced_choice = TRUE
+)
+
+# Preview tables
+output$table1_preview <- renderDT({
+  req(extracted_tables())
+  datatable(
+    extracted_tables()[[1]],
+    options = list(scrollX = TRUE, pageLength = 5)
+  )
+})
+output$table2_preview <- renderDT({
+  req(extracted_tables())
+  datatable(
+    extracted_tables()[[2]],
+    options = list(scrollX = TRUE, pageLength = 5)
+  )
+})
+output$table3_preview <- renderDT({
+  req(extracted_tables())
+  datatable(
+    extracted_tables()[[3]],
+    options = list(scrollX = TRUE, pageLength = 5)
+  )
+})
+output$table4_preview <- renderDT({
+  req(extracted_tables())
+  datatable(
+    extracted_tables()[[4]],
+    options = list(scrollX = TRUE, pageLength = 5)
+  )
+})
+output$table5_preview <- renderDT({
+  req(extracted_tables())
+  datatable(
+    extracted_tables()[[5]],
+    options = list(scrollX = TRUE, pageLength = 5)
+  )
+})
+output$table6_preview <- renderDT({
+  req(extracted_tables())
+  datatable(
+    extracted_tables()[[6]],
+    options = list(scrollX = TRUE, pageLength = 5)
+  )
+})
+output$table7_preview <- renderDT({
+  req(extracted_tables())
+  datatable(
+    extracted_tables()[[7]],
+    options = list(scrollX = TRUE, pageLength = 5)
+  )
+})
+
+# Process individual table (Tables 1-6)
+process_standard_table <- function(table_num, scale_names, subdomain, narrow) {
+  tables <- extracted_tables()
+  if (is.null(tables[[table_num]])) {
+    return(NULL)
+  }
+
+  df <- tables[[table_num]]
+  n_scales <- length(scale_names)
+
+  # Get column inputs
+  col_raw <- input[[paste0("col_raw_", table_num)]]
+  col_score <- input[[paste0("col_score_", table_num)]]
+  col_pct <- input[[paste0("col_pct_", table_num)]]
+
+  # Build result - use first n_scales rows
+  result <- data.frame(
+    scale = scale_names[1:min(n_scales, nrow(df))],
+    stringsAsFactors = FALSE
+  )
+
+  if (!is.null(col_raw) && col_raw != "None" && col_raw %in% names(df)) {
+    result$raw_score <- safe_numeric(df[[col_raw]][1:nrow(result)])
+  }
+  if (!is.null(col_score) && col_score != "None" && col_score %in% names(df)) {
+    result$score <- safe_numeric(df[[col_score]][1:nrow(result)])
+  }
+  if (!is.null(col_pct) && col_pct != "None" && col_pct %in% names(df)) {
+    result$percentile <- safe_numeric(df[[col_pct]][1:nrow(result)])
+  }
+
+  # Add metadata
+  result$test <- input$test_version
+  result$test_name <- get_test_name()
+  result$domain <- "Memory"
+  result$subdomain <- subdomain
+  result$narrow <- narrow
+  result$pass <- "Sequential"
+  result$verbal <- "Verbal"
+  result$timed <- "Untimed"
+  result$test_type <- "npsych_test"
+  result$score_type <- "scaled_score"
+  result$ci_95 <- NA_character_
+  result$range <- NA_character_
+
+  result
+}
+
+# Process Table 7 (Forced-Choice)
+process_forced_choice <- function() {
+  tables <- extracted_tables()
+  if (is.null(tables[[7]])) {
+    return(NULL)
+  }
+
+  df <- tables[[7]]
+  scale_names <- current_scales()$forced_choice
+
+  col_raw <- input$col_raw_7
+  col_base <- input$col_base_7
+
+  result <- data.frame(
+    scale = scale_names[1:min(length(scale_names), nrow(df))],
+    stringsAsFactors = FALSE
+  )
+
+  if (!is.null(col_raw) && col_raw != "None" && col_raw %in% names(df)) {
+    result$raw_score <- safe_numeric(df[[col_raw]][1:nrow(result)])
+  }
+
+  # For forced-choice, percentile is typically set to 50 (pass/fail)
+  result$score <- NA_integer_
+  result$percentile <- 50
+
+  result$test <- input$test_version
+  result$test_name <- get_test_name()
+  result$domain <- "Validity"
+  result$subdomain <- "Performance Validity"
+  result$narrow <- "Effort"
+  result$pass <- "Attention"
+  result$verbal <- "Verbal"
+  result$timed <- "Untimed"
+  result$test_type <- "validity_indicator"
+  result$score_type <- "raw_score"
+  result$ci_95 <- NA_character_
+  result$range <- NA_character_
+
+  result
+}
+
+# Combined processed data
+processed_data <- reactive({
+  req(extracted_tables())
+
+  scales <- current_scales()
+
+  # Process each table with appropriate metadata
+  t1 <- process_standard_table(
+    1,
+    scales$learning,
+    "Learning Efficiency",
+    "Word-List Learning"
+  )
+  t2 <- process_standard_table(
+    2,
+    scales$immediate,
+    "Learning Efficiency",
+    "Word-List Learning"
+  )
+  t3 <- process_standard_table(
+    3,
+    scales$delayed,
+    "Delayed Recall",
+    "Free-Recall Memory"
+  )
+  t4 <- process_standard_table(
+    4,
+    scales$recognition,
+    "Delayed Recall",
+    "Recognition Memory"
+  )
+  t5 <- process_standard_table(
+    5,
+    scales$intrusions,
+    "Attention",
+    "Response Monitoring"
+  )
+  t6 <- process_standard_table(
+    6,
+    scales$repetitions,
+    "Attention",
+    "Response Monitoring"
+  )
+  t7 <- process_forced_choice()
+
+  # Update domain for error tables
+  if (!is.null(t5)) {
+    t5$domain <- "Attention/Executive"
+  }
+  if (!is.null(t6)) {
+    t6$domain <- "Attention/Executive"
+  }
+
+  # Combine all tables
+  combined <- dplyr::bind_rows(t1, t2, t3, t4, t5, t6, t7)
+
+  if (nrow(combined) == 0) {
+    return(NULL)
+  }
+
+  # Join with lookup table for absort and description
+  if (!is.null(lookup_table) && nrow(lookup_table) > 0) {
+    # Normalize scale names for joining
+    combined <- combined |>
+      dplyr::mutate(scale_lookup = sapply(scale, normalize_scale_name))
+
+    lookup_cols <- lookup_table |>
+      dplyr::filter(test == input$test_version) |>
+      dplyr::select(scale, absort, description) |>
+      dplyr::distinct()
+
+    if (nrow(lookup_cols) > 0) {
+      combined <- combined |>
+        dplyr::left_join(lookup_cols, by = c("scale_lookup" = "scale")) |>
+        dplyr::select(-scale_lookup)
+    }
+  }
+
+  # Add missing columns
+  if (!"absort" %in% names(combined)) {
+    combined$absort <- NA_character_
+  }
+  if (!"description" %in% names(combined)) {
+    combined$description <- NA_character_
+  }
+  if (!"result" %in% names(combined)) {
+    combined$result <- NA_character_
+  }
+
+  # Apply neuro2 ranges if available
+  if (
+    neuro2_available &&
+      exists("gpluck_make_score_ranges", where = asNamespace("neuro2"))
+  ) {
+    combined <- neuro2::gpluck_make_score_ranges(
+      combined,
+      test_type = "npsych_test"
+    )
+  }
+
+  # Create result text
+  combined <- combined |>
+    dplyr::mutate(
+      result = ifelse(
+        !is.na(description) & !is.na(range),
+        paste0(description, " was ", range, "."),
+        NA_character_
+      )
+    )
+
+  # Reorder columns
+  combined |> dplyr::select(any_of(standard_col_order))
+})
+
+output$status <- renderText({
+  if (is.null(extracted_tables())) {
+    return("Upload PDF and click 'Extract All Tables'")
+  }
+
+  n_extracted <- sum(!sapply(extracted_tables(), is.null))
+  n_rows <- if (!is.null(processed_data())) nrow(processed_data()) else 0
+
+  paste0("✓ Extracted ", n_extracted, "/7 tables | ", n_rows, " total records")
+})
+
+output$combined_table <- renderDT({
+  req(processed_data())
+  datatable(
+    processed_data(),
+    options = list(scrollX = TRUE, pageLength = 20),
+    rownames = FALSE
+  )
+})
+
+output$download_csv <- downloadHandler(
+  filename = function() paste0(input$test_version, "_", Sys.Date(), ".csv"),
+  content = function(file) {
+    write.csv(processed_data(), file, row.names = FALSE, na = "")
+  }
+)
+```

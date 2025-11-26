@@ -6,3 +6,9 @@ renv/
 .Rproj.user
 wrat5.html
 wrat5.pdf
+*.pdf
+*.html
+*.qmd.bk
+*.zip
+cvlt_files/
+wrat5_corrected_files/

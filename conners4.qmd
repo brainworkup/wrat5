@@ -1,0 +1,310 @@
+---
+title: "Conners-4 PDF Extractor"
+format: 
+  html:
+    toc: true
+    theme: cosmo
+server: shiny
+---
+
+```{r}
+#| context: setup
+#| include: false
+
+library(shiny)
+library(tidyverse)
+library(tabulapdf)
+library(DT)
+
+neuro2_available <- requireNamespace("neuro2", quietly = TRUE)
+if (neuro2_available) library(neuro2)
+
+options(shiny.maxRequestSize = 50 * 1024^2)
+
+# Conners-4 specific scale definitions
+conners4_scales <- list(
+  content = c(
+    "Inattention/Executive Dysfunction",
+    "Hyperactivity", 
+    "Impulsivity",
+    "Emotional Dysregulation",
+    "Depressed Mood",
+    "Anxious Thoughts"
+  ),
+  impairment = c(
+    "Schoolwork",
+    "Peer Interactions", 
+    "Family Life"
+  ),
+  dsm = c(
+    "ADHD Inattentive Symptoms",
+    "ADHD Hyperactive/Impulsive Symptoms",
+    "Total ADHD Symptoms",
+    "Oppositional Defiant Disorder Symptoms",
+    "Conduct Disorder Symptoms"
+  ),
+  index = c("ADHD Index")
+)
+
+# Lookup table (fallback)
+lookup_path <- "~/Dropbox/neuropsych_lookup_table.csv"
+if (file.exists(lookup_path)) {
+  lookup_table <- read.csv(lookup_path, stringsAsFactors = FALSE) |>
+    dplyr::filter(grepl("conners4", test, ignore.case = TRUE))
+} else {
+  lookup_table <- data.frame(test = character(), scale = character())
+}
+```
+
+## Conners-4 Extractor
+
+Extract score tables from Conners-4 Self, Parent, or Teacher PDF reports.
+
+---
+
+```{r}
+#| panel: sidebar
+
+selectInput(
+  "rater",
+  "Rater Type",
+  choices = c(
+    "Self-Report" = "conners4_self",
+    "Parent" = "conners4_parent", 
+    "Teacher" = "conners4_teacher"
+  ),
+  selected = "conners4_self"
+)
+
+hr()
+
+fileInput("file", "Upload Conners-4 PDF", accept = ".pdf")
+
+numericInput("pages", "Page(s) to Extract", value = 2, min = 1, max = 20)
+
+selectInput(
+  "scale_type",
+  "Scale Type",
+  choices = c(
+    "Content Scales" = "content",
+    "Impairment Scales" = "impairment",
+    "DSM Symptom Scales" = "dsm",
+    "ADHD Index" = "index",
+    "All (auto-detect)" = "all"
+  ),
+  selected = "all"
+)
+
+hr()
+
+uiOutput("table_selector")
+
+hr()
+
+actionButton("extract", "Extract Tables", class = "btn-success")
+downloadButton("download", "Download CSV", class = "btn-primary")
+```
+
+```{r}
+#| panel: fill
+
+verbatimTextOutput("status")
+
+hr()
+
+uiOutput("column_mapper")
+
+hr()
+
+h4("Processed Scores")
+DTOutput("results")
+
+hr()
+
+details(
+  summary = "Raw Extraction (Debug)",
+  DTOutput("raw")
+)
+```
+
+```{r}
+#| context: server
+
+safe_num <- function(x) {
+  suppressWarnings(as.numeric(gsub("[^0-9.-]", "", as.character(x))))
+}
+
+# Extract tables
+raw_tables <- eventReactive(input$extract, {
+  req(input$file)
+  withProgress(message = "Extracting...", {
+    tryCatch({
+      tabulapdf::extract_tables(
+        file = input$file$datapath,
+        pages = input$pages,
+        method = "stream",
+        output = "matrix"
+      )
+    }, error = function(e) {
+      showNotification(e$message, type = "error")
+      NULL
+    })
+  })
+})
+
+# Table selector
+output$table_selector <- renderUI({
+  req(raw_tables())
+  n <- length(raw_tables())
+  if (n > 1) {
+    selectInput("table_idx", paste0("Table (", n, " found)"),
+                choices = seq_len(n), selected = 1)
+  }
+})
+
+table_idx <- reactive({
+  if (!is.null(input$table_idx)) as.integer(input$table_idx) else 1
+})
+
+# Candidate table
+candidate <- reactive({
+  req(raw_tables())
+  df <- as.data.frame(raw_tables()[[table_idx()]], stringsAsFactors = FALSE)
+  df[] <- lapply(df, trimws)
+  colnames(df) <- paste0("V", seq_len(ncol(df)))
+  df
+})
+
+# Column mapping UI
+output$column_mapper <- renderUI({
+  req(candidate())
+  df <- candidate()
+  cols <- colnames(df)
+  
+  choices <- setNames(cols, sapply(cols, function(c) {
+    paste0(c, " (", paste(head(df[[c]], 2), collapse = ", "), ")")
+  }))
+  none <- c("None" = "None")
+  
+  wellPanel(
+    h5("Column Mapping (T-Score Layout)"),
+    fluidRow(
+      column(4, selectInput("col_scale", "Scale Name:", choices = choices, selected = cols[1])),
+      column(4, selectInput("col_raw", "Raw Score:", choices = c(none, choices), 
+                            selected = if (length(cols) >= 2) cols[2] else "None")),
+      column(4, selectInput("col_score", "T-Score:", choices = choices,
+                            selected = if (length(cols) >= 3) cols[3] else cols[1]))
+    ),
+    fluidRow(
+      column(4, selectInput("col_ci", "CI:", choices = c(none, choices), selected = "None")),
+      column(4, selectInput("col_percentile", "Percentile:", choices = c(none, choices), selected = "None")),
+      column(4, selectInput("col_range", "Range:", choices = c(none, choices), selected = "None"))
+    ),
+    fluidRow(
+      column(4, selectInput("col_prob", "Probability %:", choices = c(none, choices), selected = "None")),
+      column(4, selectInput("col_guideline", "Guideline:", choices = c(none, choices), selected = "None"))
+    )
+  )
+})
+
+# Process data
+processed <- reactive({
+  req(candidate(), input$col_scale, input$col_score)
+  
+  df <- candidate()
+  
+  result <- data.frame(
+    scale = trimws(df[[input$col_scale]]),
+    score = safe_num(df[[input$col_score]]),
+    stringsAsFactors = FALSE
+  )
+  
+  # Optional columns
+  if (input$col_raw != "None") result$raw_score <- safe_num(df[[input$col_raw]])
+  if (input$col_ci != "None") result$ci_95 <- gsub("–|—", "-", trimws(df[[input$col_ci]]))
+  if (input$col_percentile != "None") result$percentile <- safe_num(df[[input$col_percentile]])
+  if (input$col_range != "None") result$range <- trimws(df[[input$col_range]])
+  if (input$col_prob != "None") result$probability_score <- trimws(df[[input$col_prob]])
+  if (input$col_guideline != "None") result$guideline <- trimws(df[[input$col_guideline]])
+  
+  # Filter valid
+  result <- result |>
+    dplyr::filter(!is.na(scale), scale != "", !is.na(score) | scale == "ADHD Index")
+  
+  # Identify scale type
+  all_scales <- unlist(conners4_scales)
+  result <- result |>
+    dplyr::mutate(
+      scale_category = dplyr::case_when(
+        scale %in% conners4_scales$content ~ "Content",
+        scale %in% conners4_scales$impairment ~ "Impairment",
+        scale %in% conners4_scales$dsm ~ "DSM",
+        scale %in% conners4_scales$index ~ "Index",
+        TRUE ~ "Other"
+      )
+    )
+  
+  # Filter by selected scale type
+  if (input$scale_type != "all") {
+    target_scales <- conners4_scales[[input$scale_type]]
+    result <- result |> dplyr::filter(scale %in% target_scales)
+  }
+  
+  # Add metadata
+  result <- result |>
+    dplyr::mutate(
+      test = input$rater,
+      test_name = dplyr::case_when(
+        input$rater == "conners4_self" ~ "Conners-4 Self",
+        input$rater == "conners4_parent" ~ "Conners-4 Parent",
+        input$rater == "conners4_teacher" ~ "Conners-4 Teacher"
+      ),
+      domain = "ADHD",
+      test_type = "rating_scale",
+      score_type = "t_score"
+    )
+  
+  # Join with lookup
+  if (nrow(lookup_table) > 0) {
+    lookup_cols <- lookup_table |>
+      dplyr::filter(test == input$rater) |>
+      dplyr::select(scale, subdomain, narrow, absort, description) |>
+      dplyr::distinct()
+    
+    if (nrow(lookup_cols) > 0) {
+      result <- result |>
+        dplyr::left_join(lookup_cols, by = "scale")
+    }
+  }
+  
+  # Apply neuro2 ranges
+  if (neuro2_available && exists("gpluck_make_score_ranges", where = asNamespace("neuro2"))) {
+    result <- result |>
+      dplyr::mutate(result = NA_character_) |>
+      neuro2::gpluck_make_score_ranges(test_type = "rating_scale")
+  }
+  
+  result
+})
+
+# Outputs
+output$status <- renderText({
+  if (is.null(raw_tables())) return("Upload PDF and click Extract")
+  paste0("✓ ", length(raw_tables()), " table(s) | ", nrow(processed()), " scales")
+})
+
+output$raw <- renderDT({
+  req(candidate())
+  datatable(candidate(), options = list(scrollX = TRUE, pageLength = 5))
+})
+
+output$results <- renderDT({
+  req(processed())
+  datatable(processed(), options = list(scrollX = TRUE, pageLength = 15))
+})
+
+output$download <- downloadHandler(
+  filename = function() paste0(input$rater, "_", Sys.Date(), ".csv"),
+  content = function(file) write.csv(processed(), file, row.names = FALSE, na = "")
+)
+```

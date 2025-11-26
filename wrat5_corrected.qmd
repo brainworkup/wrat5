@@ -1,0 +1,440 @@
+---
+title: "WRAT-5 Score Extractor"
+format: 
+  html:
+    toc: true
+    theme: cosmo
+server: shiny
+---
+
+```{r}
+#| context: setup
+#| include: false
+
+library(shiny)
+library(tidyverse)
+library(tabulapdf)
+library(DT)
+
+neuro2_available <- requireNamespace("neuro2", quietly = TRUE)
+if (neuro2_available) {
+  library(neuro2)
+}
+
+options(shiny.maxRequestSize = 50 * 1024^2)
+
+# Standard column order
+standard_col_order <- c(
+  "scale",
+  "raw_score",
+  "score",
+  "ci_95",
+  "percentile",
+  "range",
+  "test",
+  "test_name",
+  "domain",
+  "subdomain",
+  "narrow",
+  "pass",
+  "verbal",
+  "timed",
+  "test_type",
+  "score_type",
+  "absort",
+  "description",
+  "result"
+)
+
+# WRAT-5 scale definitions from lookup table
+wrat5_scale_info <- list(
+  "Math Computation" = list(
+    subdomain = "Math",
+    narrow = "Math Achievement",
+    pass = "Simultaneous",
+    verbal = "Nonverbal",
+    timed = "Untimed",
+    absort = "wrat5_01",
+    description = "Paper-and-pencil math calculation skills, ranging from basic operations with integers to geometry, algebra, and calculus problems"
+  ),
+  "Spelling" = list(
+    subdomain = "Writing",
+    narrow = "Spelling Ability",
+    pass = "Sequential",
+    verbal = "Nonverbal",
+    timed = "Untimed",
+    absort = "wrat5_02",
+    description = "Written spelling of words from dictations"
+  ),
+  "Word Reading" = list(
+    subdomain = "Premorbid Ability",
+    narrow = "Word Reading",
+    pass = "Knowledge",
+    verbal = "Verbal",
+    timed = "Untimed",
+    absort = "wrat5_03",
+    description = "An estimate of premorbid verbal ability level"
+  ),
+  "Sentence Comprehension" = list(
+    subdomain = "Reading",
+    narrow = "Reading Comprehension",
+    pass = "Knowledge",
+    verbal = "Verbal",
+    timed = "Untimed",
+    absort = "wrat5_04",
+    description = "An estimate of reading comprehension via sentences."
+  ),
+  "Reading Composite" = list(
+    subdomain = "Reading",
+    narrow = "Reading Ability",
+    pass = "Sequential",
+    verbal = "Verbal",
+    timed = "Untimed",
+    absort = "wrat5_05",
+    description = "Composite score of decoding and comprehension that balances word-level and text-level reading skills"
+  )
+)
+
+# Load lookup table for additional data
+lookup_path <- "~/Dropbox/neuropsych_lookup_table.csv"
+if (file.exists(lookup_path)) {
+  lookup_table <- read.csv(lookup_path, stringsAsFactors = FALSE) |>
+    dplyr::filter(test == "wrat5")
+} else {
+  lookup_table <- NULL
+}
+```
+
+## WRAT-5 Wide Range Achievement Test
+
+Upload a WRAT-5 PDF report to extract the score table.
+
+**Test Info:** Domain = Academic Skills (Word Reading = General Cognitive Ability) | Score Type = Standard Score | Test Type = npsych_test
+
+---
+
+```{r}
+#| panel: sidebar
+
+fileInput("file", "Upload WRAT-5 PDF", accept = ".pdf")
+numericInput("pages", "Page to Scan", value = 2, min = 1, max = 20)
+selectInput(
+  "method",
+  "Extraction Method",
+  choices = c("stream", "lattice"),
+  selected = "stream"
+)
+hr()
+uiOutput("table_selector_ui")
+hr()
+actionButton("extract_btn", "Extract Tables", class = "btn-success")
+downloadButton("download_csv", "Download CSV", class = "btn-primary")
+```
+
+```{r}
+#| panel: fill
+
+verbatimTextOutput("status")
+hr()
+uiOutput("column_mapping_ui")
+hr()
+h4("Processed Data")
+DTOutput("results_table")
+hr()
+tags$details(
+  tags$summary("Raw Extraction (Debug)"),
+  DTOutput("raw_table")
+)
+```
+
+```{r}
+#| context: server
+
+safe_numeric <- function(x) {
+  suppressWarnings(as.numeric(gsub("[^0-9.-]", "", as.character(x))))
+}
+
+raw_tables <- eventReactive(input$extract_btn, {
+  req(input$file)
+  withProgress(message = "Extracting...", {
+    tryCatch(
+      {
+        tabulapdf::extract_tables(
+          file = input$file$datapath,
+          pages = input$pages,
+          method = input$method,
+          output = "matrix"
+        )
+      },
+      error = function(e) {
+        showNotification(paste("Error:", e$message), type = "error")
+        NULL
+      }
+    )
+  })
+})
+
+output$table_selector_ui <- renderUI({
+  req(raw_tables())
+  n <- length(raw_tables())
+  if (n > 1) {
+    selectInput(
+      "table_idx",
+      paste("Table (", n, "found)"),
+      choices = seq_len(n),
+      selected = 1
+    )
+  }
+})
+
+selected_idx <- reactive({
+  if (!is.null(input$table_idx)) as.integer(input$table_idx) else 1
+})
+
+candidate_df <- reactive({
+  req(raw_tables())
+  df <- as.data.frame(raw_tables()[[selected_idx()]], stringsAsFactors = FALSE)
+  df[] <- lapply(df, trimws)
+  colnames(df) <- paste0("V", seq_len(ncol(df)))
+  df
+})
+
+output$column_mapping_ui <- renderUI({
+  req(candidate_df())
+  df <- candidate_df()
+  cols <- colnames(df)
+
+  make_choices <- function(cols, df) {
+    setNames(
+      cols,
+      sapply(cols, function(c) {
+        preview <- paste(head(na.omit(df[[c]]), 2), collapse = ", ")
+        paste0(c, " (", substr(preview, 1, 25), ")")
+      })
+    )
+  }
+
+  choices <- make_choices(cols, df)
+  none <- c("None" = "None")
+
+  wellPanel(
+    h5("Column Mapping"),
+    fluidRow(
+      column(
+        3,
+        selectInput(
+          "col_scale",
+          "Scale:",
+          choices = choices,
+          selected = cols[1]
+        )
+      ),
+      column(
+        3,
+        selectInput(
+          "col_raw",
+          "Raw Score:",
+          choices = c(none, choices),
+          selected = if (length(cols) >= 2) cols[2] else "None"
+        )
+      ),
+      column(
+        3,
+        selectInput(
+          "col_score",
+          "Standard Score:",
+          choices = choices,
+          selected = if (length(cols) >= 3) cols[3] else cols[1]
+        )
+      ),
+      column(
+        3,
+        selectInput(
+          "col_ci",
+          "95% CI:",
+          choices = c(none, choices),
+          selected = "None"
+        )
+      )
+    ),
+    fluidRow(
+      column(
+        3,
+        selectInput(
+          "col_percentile",
+          "Percentile:",
+          choices = c(none, choices),
+          selected = "None"
+        )
+      ),
+      column(
+        3,
+        selectInput(
+          "col_range",
+          "Category:",
+          choices = c(none, choices),
+          selected = "None"
+        )
+      ),
+      column(
+        3,
+        selectInput(
+          "col_grade",
+          "Grade Equiv:",
+          choices = c(none, choices),
+          selected = "None"
+        )
+      ),
+      column(
+        3,
+        selectInput(
+          "col_gsv",
+          "GSV:",
+          choices = c(none, choices),
+          selected = "None"
+        )
+      )
+    )
+  )
+})
+
+processed_data <- reactive({
+  req(candidate_df(), input$col_scale, input$col_score)
+
+  df <- candidate_df()
+
+  result <- data.frame(
+    scale = trimws(df[[input$col_scale]]),
+    score = safe_numeric(df[[input$col_score]]),
+    stringsAsFactors = FALSE
+  )
+
+  # Add optional columns
+  if (!is.null(input$col_raw) && input$col_raw != "None") {
+    result$raw_score <- safe_numeric(df[[input$col_raw]])
+  }
+  if (!is.null(input$col_ci) && input$col_ci != "None") {
+    result$ci_95 <- gsub("–|—", "-", trimws(df[[input$col_ci]]))
+  }
+  if (!is.null(input$col_percentile) && input$col_percentile != "None") {
+    result$percentile <- safe_numeric(df[[input$col_percentile]])
+  }
+  if (!is.null(input$col_range) && input$col_range != "None") {
+    result$range <- trimws(df[[input$col_range]])
+  }
+  if (!is.null(input$col_grade) && input$col_grade != "None") {
+    result$grade_equiv <- trimws(df[[input$col_grade]])
+  }
+  if (!is.null(input$col_gsv) && input$col_gsv != "None") {
+    result$gsv <- safe_numeric(df[[input$col_gsv]])
+  }
+
+  # Filter valid rows
+  result <- result |>
+    dplyr::filter(!is.na(scale), scale != "", !is.na(score))
+
+  # Add test metadata
+  result <- result |>
+    dplyr::mutate(
+      test = "wrat5",
+      test_name = "WRAT-5",
+      test_type = "npsych_test",
+      score_type = "standard_score"
+    )
+
+  # Add scale-specific info from lookup (domain depends on scale)
+  result <- result |>
+    dplyr::rowwise() |>
+    dplyr::mutate(
+      # Word Reading is under General Cognitive Ability, others under Academic Skills
+      domain = ifelse(
+        scale == "Word Reading",
+        "General Cognitive Ability",
+        "Academic Skills"
+      ),
+      subdomain = if (scale %in% names(wrat5_scale_info)) {
+        wrat5_scale_info[[scale]]$subdomain
+      } else {
+        NA_character_
+      },
+      narrow = if (scale %in% names(wrat5_scale_info)) {
+        wrat5_scale_info[[scale]]$narrow
+      } else {
+        NA_character_
+      },
+      pass = if (scale %in% names(wrat5_scale_info)) {
+        wrat5_scale_info[[scale]]$pass
+      } else {
+        NA_character_
+      },
+      verbal = if (scale %in% names(wrat5_scale_info)) {
+        wrat5_scale_info[[scale]]$verbal
+      } else {
+        NA_character_
+      },
+      timed = if (scale %in% names(wrat5_scale_info)) {
+        wrat5_scale_info[[scale]]$timed
+      } else {
+        NA_character_
+      },
+      absort = if (scale %in% names(wrat5_scale_info)) {
+        wrat5_scale_info[[scale]]$absort
+      } else {
+        NA_character_
+      },
+      description = if (scale %in% names(wrat5_scale_info)) {
+        wrat5_scale_info[[scale]]$description
+      } else {
+        NA_character_
+      }
+    ) |>
+    dplyr::ungroup()
+
+  # Add result column
+  result$result <- NA_character_
+
+  # Apply neuro2 ranges if available
+  if (
+    neuro2_available &&
+      exists("gpluck_make_score_ranges", where = asNamespace("neuro2"))
+  ) {
+    result <- neuro2::gpluck_make_score_ranges(
+      result,
+      test_type = "npsych_test"
+    )
+  }
+
+  # Reorder columns
+  result |> dplyr::select(any_of(standard_col_order))
+})
+
+output$status <- renderText({
+  if (is.null(raw_tables())) {
+    return("Click 'Extract Tables' after uploading PDF")
+  }
+  paste0(
+    "✓ ",
+    length(raw_tables()),
+    " table(s) | ",
+    nrow(processed_data()),
+    " records"
+  )
+})
+
+output$raw_table <- renderDT({
+  req(candidate_df())
+  datatable(candidate_df(), options = list(scrollX = TRUE, pageLength = 5))
+})
+
+output$results_table <- renderDT({
+  req(processed_data())
+  datatable(processed_data(), options = list(scrollX = TRUE, pageLength = 10))
+})
+
+output$download_csv <- downloadHandler(
+  filename = function() paste0("wrat5_", Sys.Date(), ".csv"),
+  content = function(file) {
+    write.csv(processed_data(), file, row.names = FALSE, na = "")
+  }
+)
+```
