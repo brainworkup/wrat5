@@ -1,0 +1,551 @@
+---
+title: "CVLT-3 Brief Extractor (Diagnostic)"
+format: 
+  html:
+    theme: cosmo
+server: shiny
+---
+
+```{r}
+#| context: setup
+#| include: false
+
+library(shiny)
+library(tidyverse)
+library(tabulapdf)
+library(DT)
+
+neuro2_available <- requireNamespace("neuro2", quietly = TRUE)
+if (neuro2_available) {
+  library(neuro2)
+}
+
+options(shiny.maxRequestSize = 50 * 1024^2)
+
+col_order <- c(
+  "scale",
+  "raw_score",
+  "score",
+  "percentile",
+  "range",
+  "ci_95",
+  "test",
+  "test_name",
+  "domain",
+  "subdomain",
+  "narrow",
+  "pass",
+  "verbal",
+  "timed",
+  "test_type",
+  "score_type",
+  "absort",
+  "description",
+  "result"
+)
+
+# Complete metadata
+meta <- tribble(
+  ~scale                                       , ~domain                , ~subdomain                , ~narrow                            , ~pass        , ~verbal  , ~timed    , ~test_type           , ~score_type      , ~absort                                                    , ~description                                                     ,
+  "Trial 1 Correct"                            , "Memory"               , "Learning Efficiency"     , "Word-List Learning"               , "Sequential" , "Verbal" , "Untimed" , "npsych_test"        , "scaled_score"   , "cvlt3_brief_trial 1 correct_1"                            , "Correct number of words learned on the first trial"             ,
+  "Trial 2 Correct"                            , "Memory"               , "Learning Efficiency"     , "Word-List Learning"               , "Sequential" , "Verbal" , "Untimed" , "npsych_test"        , "scaled_score"   , "cvlt3_brief_trial 2 correct_2"                            , "Correct number of words learned on the second trial"            ,
+  "Trial 3 Correct"                            , "Memory"               , "Learning Efficiency"     , "Word-List Learning"               , "Sequential" , "Verbal" , "Untimed" , "npsych_test"        , "scaled_score"   , "cvlt3_brief_trial 3 correct_3"                            , "Correct number of words learned on the third trial"             ,
+  "Trial 4 Correct"                            , "Memory"               , "Learning Efficiency"     , "Word-List Learning"               , "Sequential" , "Verbal" , "Untimed" , "npsych_test"        , "scaled_score"   , "cvlt3_brief_trial 4 correct_4"                            , "Correct number of words learned on the fourth trial"            ,
+  "Trials 1-4 Correct"                         , "Memory"               , "Learning Efficiency"     , "Word-List Learning"               , "Sequential" , "Verbal" , "Untimed" , "npsych_test"        , "standard_score" , "cvlt3_brief_trials 1-4 correct_1"                         , "Learning and recall of rote verbal information (word list)"     ,
+  "Short Delay Free Recall"                    , "Memory"               , "Delayed Recall"          , "Free-Recall Memory"               , "Sequential" , "Verbal" , "Untimed" , "npsych_test"        , "scaled_score"   , "cvlt3_brief_short delay free recall_1"                    , "Recall of the list after a short delay"                         ,
+  "Long Delay Free Recall"                     , "Memory"               , "Delayed Recall"          , "Free-Recall Memory"               , "Sequential" , "Verbal" , "Untimed" , "npsych_test"        , "scaled_score"   , "cvlt3_brief_long delay free recall_2"                     , "Recall of the list after a long (20-minute) delay"              ,
+  "Long Delay Cued Recall"                     , "Memory"               , "Delayed Recall"          , "Free-Recall Memory"               , "Sequential" , "Verbal" , "Untimed" , "npsych_test"        , "scaled_score"   , "cvlt3_brief_long delay cued recall_3"                     , "Recall of the list after a long (20-minute) delay with cues"    ,
+  "Total Hits"                                 , "Memory"               , "Delayed Recall"          , "Recognition Memory"               , "Sequential" , "Verbal" , "Untimed" , "npsych_test"        , "scaled_score"   , "cvlt3_brief_total hits_1"                                 , "Yes/no recognition total hits"                                  ,
+  "Total False Positives"                      , "Memory"               , "Delayed Recall"          , "Recognition Memory"               , "Sequential" , "Verbal" , "Untimed" , "npsych_test"        , "scaled_score"   , "cvlt3_brief_total false positives_2"                      , "Yes/no recognition total false positives"                       ,
+  "Recognition Discriminability (d')"          , "Memory"               , "Delayed Recall"          , "Recognition Memory"               , "Sequential" , "Verbal" , "Untimed" , "npsych_test"        , "scaled_score"   , "cvlt3_brief_recognition discriminability (d')_3"          , "Yes/no recognition discriminability"                            ,
+  "Recognition Discriminability Nonparametric" , "Memory"               , "Delayed Recall"          , "Recognition Memory"               , "Sequential" , "Verbal" , "Untimed" , "npsych_test"        , "scaled_score"   , "cvlt3_brief_recognition discriminability nonparametric_4" , "Yes/no recognition discriminability (nonparametric)"            ,
+  "CVLT-3 Total Intrusions"                    , "Attention/Executive"  , "Attentional Functioning" , "Response Monitoring"              , "Attention"  , "Verbal" , "Untimed" , "npsych_test"        , "scaled_score"   , "cvlt3_brief_cvlt-3 total intrusions_1"                    , "Total number of intrusive response errors"                      ,
+  "CVLT-3 Total Repetitions"                   , "Attention/Executive"  , "Attentional Functioning" , "Response Monitoring"              , "Attention"  , "Verbal" , "Untimed" , "npsych_test"        , "scaled_score"   , "cvlt3_brief_cvlt-3 total repetitions_1"                   , "Total number of repetitive response errors"                     ,
+  "CVLT-3 Forced-Choice Recognition Hits"      , "Performance Validity" , "Cognitive Effort"        , "Forced-Choice Recognition Memory" , ""           , "Verbal" , "Untimed" , "validity_indicator" , "raw_score"      , "cvlt3_brief_cvlt-3 forced-choice recognition hits_1"      , "Number of hits on forced-choice recognition trials (raw score)"
+)
+```
+
+## Step 1: Extract Full Pages (No Areas)
+
+First, extract the entire page to see what tabulapdf finds.
+
+```{r}
+#| panel: sidebar
+
+fileInput("file", "Upload CVLT-3 Brief PDF", accept = ".pdf")
+
+hr()
+h4("Step 1: Extract Pages")
+numericInput("page_core", "Core Score Summary page:", value = 19, min = 1)
+numericInput("page_index", "Standard Score Summary page:", value = 23, min = 1)
+numericInput("page_process", "Process Score Summary page:", value = 25, min = 1)
+
+selectInput("method", "Method:", c("stream", "lattice"), "stream")
+actionButton("extract_btn", "Extract Full Pages", class = "btn-primary")
+
+hr()
+h4("Step 2: Map Rows")
+helpText("After extraction, identify row numbers for each scale")
+
+hr()
+actionButton("build_btn", "Build Final CSV", class = "btn-success")
+downloadButton("dl", "Download CSV")
+```
+
+```{r}
+#| panel: fill
+
+verbatimTextOutput("status")
+
+tabsetPanel(
+  tabPanel(
+    "Core Page Raw",
+    helpText(
+      "Find rows for: Trial 1-4, Short/Long Delay, Recognition, Intrusions, Forced-Choice"
+    ),
+    DTOutput("core_raw")
+  ),
+  tabPanel(
+    "Index Page Raw",
+    helpText("Find row for: Trials 1-4 Correct (standard score)"),
+    DTOutput("index_raw")
+  ),
+  tabPanel(
+    "Process Page Raw",
+    helpText("Find row for: Total Repetitions"),
+    DTOutput("process_raw")
+  ),
+  tabPanel("Row Mapping", uiOutput("mapping_ui")),
+  tabPanel("Final Output", DTOutput("final_tbl"))
+)
+```
+
+```{r}
+#| context: server
+
+safe_num <- function(x) {
+  suppressWarnings(as.numeric(gsub("[^0-9.-]", "", as.character(x))))
+}
+
+rv <- reactiveValues(core = NULL, index = NULL, process = NULL, final = NULL)
+
+# Extract full pages
+observeEvent(input$extract_btn, {
+  req(input$file)
+
+  withProgress(message = "Extracting pages...", {
+    # Core page
+    incProgress(0.3, detail = "Core page")
+    tryCatch(
+      {
+        res <- tabulapdf::extract_tables(
+          input$file$datapath,
+          pages = input$page_core,
+          method = input$method,
+          output = "data.frame"
+        )
+        if (length(res) > 0) {
+          # Combine all tables from page
+          rv$core <- bind_rows(lapply(res, function(x) {
+            x <- as.data.frame(x)
+            x$row_num <- seq_len(nrow(x))
+            x
+          }))
+        }
+      },
+      error = function(e) {
+        showNotification(paste("Core error:", e$message), type = "error")
+      }
+    )
+
+    # Index page
+    incProgress(0.3, detail = "Index page")
+    tryCatch(
+      {
+        res <- tabulapdf::extract_tables(
+          input$file$datapath,
+          pages = input$page_index,
+          method = input$method,
+          output = "data.frame"
+        )
+        if (length(res) > 0) {
+          rv$index <- bind_rows(lapply(res, function(x) {
+            x <- as.data.frame(x)
+            x$row_num <- seq_len(nrow(x))
+            x
+          }))
+        }
+      },
+      error = function(e) {
+        showNotification(paste("Index error:", e$message), type = "error")
+      }
+    )
+
+    # Process page
+    incProgress(0.3, detail = "Process page")
+    tryCatch(
+      {
+        res <- tabulapdf::extract_tables(
+          input$file$datapath,
+          pages = input$page_process,
+          method = input$method,
+          output = "data.frame"
+        )
+        if (length(res) > 0) {
+          rv$process <- bind_rows(lapply(res, function(x) {
+            x <- as.data.frame(x)
+            x$row_num <- seq_len(nrow(x))
+            x
+          }))
+        }
+      },
+      error = function(e) {
+        showNotification(paste("Process error:", e$message), type = "error")
+      }
+    )
+  })
+})
+
+output$core_raw <- renderDT({
+  req(rv$core)
+  datatable(
+    rv$core,
+    options = list(scrollX = TRUE, pageLength = 30),
+    rownames = FALSE
+  )
+})
+
+output$index_raw <- renderDT({
+  req(rv$index)
+  datatable(
+    rv$index,
+    options = list(scrollX = TRUE, pageLength = 20),
+    rownames = FALSE
+  )
+})
+
+output$process_raw <- renderDT({
+  req(rv$process)
+  datatable(
+    rv$process,
+    options = list(scrollX = TRUE, pageLength = 20),
+    rownames = FALSE
+  )
+})
+
+output$status <- renderText({
+  core_n <- if (!is.null(rv$core)) nrow(rv$core) else 0
+  idx_n <- if (!is.null(rv$index)) nrow(rv$index) else 0
+  proc_n <- if (!is.null(rv$process)) nrow(rv$process) else 0
+  final_n <- if (!is.null(rv$final)) nrow(rv$final) else 0
+  paste0(
+    "Core: ",
+    core_n,
+    " rows | Index: ",
+    idx_n,
+    " rows | Process: ",
+    proc_n,
+    " rows | Final: ",
+    final_n,
+    "/15 scales"
+  )
+})
+
+# Dynamic mapping UI
+output$mapping_ui <- renderUI({
+  req(rv$core)
+
+  core_cols <- setdiff(names(rv$core), "row_num")
+  idx_cols <- if (!is.null(rv$index)) {
+    setdiff(names(rv$index), "row_num")
+  } else {
+    core_cols
+  }
+  proc_cols <- if (!is.null(rv$process)) {
+    setdiff(names(rv$process), "row_num")
+  } else {
+    core_cols
+  }
+
+  wellPanel(
+    h4("Column Mapping"),
+    fluidRow(
+      column(
+        3,
+        selectInput(
+          "col_raw",
+          "Raw Score Col:",
+          choices = core_cols,
+          selected = core_cols[min(2, length(core_cols))]
+        )
+      ),
+      column(
+        3,
+        selectInput(
+          "col_score",
+          "Scaled Score Col:",
+          choices = core_cols,
+          selected = core_cols[min(3, length(core_cols))]
+        )
+      ),
+      column(
+        3,
+        selectInput(
+          "col_pct",
+          "Percentile Col:",
+          choices = core_cols,
+          selected = core_cols[min(4, length(core_cols))]
+        )
+      )
+    ),
+
+    hr(),
+    h4("Core Page Row Numbers (check raw data tab)"),
+
+    fluidRow(
+      column(3, numericInput("r_t1", "Trial 1 row:", value = 2, min = 1)),
+      column(3, numericInput("r_t2", "Trial 2 row:", value = 3, min = 1)),
+      column(3, numericInput("r_t3", "Trial 3 row:", value = 4, min = 1)),
+      column(3, numericInput("r_t4", "Trial 4 row:", value = 5, min = 1))
+    ),
+    fluidRow(
+      column(
+        4,
+        numericInput("r_sdfr", "Short Delay Free row:", value = 7, min = 1)
+      ),
+      column(
+        4,
+        numericInput("r_ldfr", "Long Delay Free row:", value = 8, min = 1)
+      ),
+      column(
+        4,
+        numericInput("r_ldcr", "Long Delay Cued row:", value = 9, min = 1)
+      )
+    ),
+    fluidRow(
+      column(3, numericInput("r_hits", "Total Hits row:", value = 11, min = 1)),
+      column(
+        3,
+        numericInput("r_fp", "False Positives row:", value = 12, min = 1)
+      ),
+      column(3, numericInput("r_dprime", "d' row:", value = 13, min = 1)),
+      column(
+        3,
+        numericInput("r_nonpar", "Nonparametric row:", value = 14, min = 1)
+      )
+    ),
+    fluidRow(
+      column(
+        6,
+        numericInput("r_intrus", "Intrusions row:", value = 16, min = 1)
+      ),
+      column(6, numericInput("r_fc", "Forced-Choice row:", value = 18, min = 1))
+    ),
+
+    hr(),
+    h4("Index Page (Trials 1-4 Correct standard score)"),
+    fluidRow(
+      column(
+        4,
+        selectInput(
+          "idx_col_raw",
+          "Sum Scaled Col:",
+          choices = idx_cols,
+          selected = idx_cols[min(2, length(idx_cols))]
+        )
+      ),
+      column(
+        4,
+        selectInput(
+          "idx_col_score",
+          "Index Score Col:",
+          choices = idx_cols,
+          selected = idx_cols[min(3, length(idx_cols))]
+        )
+      ),
+      column(
+        4,
+        selectInput(
+          "idx_col_pct",
+          "Percentile Col:",
+          choices = idx_cols,
+          selected = idx_cols[min(4, length(idx_cols))]
+        )
+      )
+    ),
+    numericInput("r_trials14", "Trials 1-4 row:", value = 2, min = 1),
+
+    hr(),
+    h4("Process Page (Repetitions)"),
+    fluidRow(
+      column(
+        4,
+        selectInput(
+          "proc_col_raw",
+          "Raw Col:",
+          choices = proc_cols,
+          selected = proc_cols[min(2, length(proc_cols))]
+        )
+      ),
+      column(
+        4,
+        selectInput(
+          "proc_col_score",
+          "Scaled Col:",
+          choices = proc_cols,
+          selected = proc_cols[min(3, length(proc_cols))]
+        )
+      ),
+      column(
+        4,
+        selectInput(
+          "proc_col_pct",
+          "Percentile Col:",
+          choices = proc_cols,
+          selected = proc_cols[min(4, length(proc_cols))]
+        )
+      )
+    ),
+    numericInput("r_rep", "Repetitions row:", value = 5, min = 1)
+  )
+})
+
+# Build final data
+observeEvent(input$build_btn, {
+  req(rv$core)
+
+  core <- rv$core
+  idx <- rv$index
+  proc <- rv$process
+
+  get_val <- function(df, row, col) {
+    if (is.null(df) || row > nrow(df) || !col %in% names(df)) {
+      return(NA)
+    }
+    safe_num(df[[col]][row])
+  }
+
+  results <- tibble(
+    scale = c(
+      "Trial 1 Correct",
+      "Trial 2 Correct",
+      "Trial 3 Correct",
+      "Trial 4 Correct",
+      "Trials 1-4 Correct",
+      "Short Delay Free Recall",
+      "Long Delay Free Recall",
+      "Long Delay Cued Recall",
+      "Total Hits",
+      "Total False Positives",
+      "Recognition Discriminability (d')",
+      "Recognition Discriminability Nonparametric",
+      "CVLT-3 Total Intrusions",
+      "CVLT-3 Total Repetitions",
+      "CVLT-3 Forced-Choice Recognition Hits"
+    ),
+    raw_score = c(
+      get_val(core, input$r_t1, input$col_raw),
+      get_val(core, input$r_t2, input$col_raw),
+      get_val(core, input$r_t3, input$col_raw),
+      get_val(core, input$r_t4, input$col_raw),
+      get_val(idx, input$r_trials14, input$idx_col_raw),
+      get_val(core, input$r_sdfr, input$col_raw),
+      get_val(core, input$r_ldfr, input$col_raw),
+      get_val(core, input$r_ldcr, input$col_raw),
+      get_val(core, input$r_hits, input$col_raw),
+      get_val(core, input$r_fp, input$col_raw),
+      get_val(core, input$r_dprime, input$col_raw),
+      get_val(core, input$r_nonpar, input$col_raw),
+      get_val(core, input$r_intrus, input$col_raw),
+      get_val(proc, input$r_rep, input$proc_col_raw),
+      get_val(core, input$r_fc, input$col_raw)
+    ),
+    score = c(
+      get_val(core, input$r_t1, input$col_score),
+      get_val(core, input$r_t2, input$col_score),
+      get_val(core, input$r_t3, input$col_score),
+      get_val(core, input$r_t4, input$col_score),
+      get_val(idx, input$r_trials14, input$idx_col_score),
+      get_val(core, input$r_sdfr, input$col_score),
+      get_val(core, input$r_ldfr, input$col_score),
+      get_val(core, input$r_ldcr, input$col_score),
+      get_val(core, input$r_hits, input$col_score),
+      get_val(core, input$r_fp, input$col_score),
+      get_val(core, input$r_dprime, input$col_score),
+      get_val(core, input$r_nonpar, input$col_score),
+      get_val(core, input$r_intrus, input$col_score),
+      get_val(proc, input$r_rep, input$proc_col_score),
+      NA # Forced-choice has no scaled score
+    ),
+    percentile = c(
+      get_val(core, input$r_t1, input$col_pct),
+      get_val(core, input$r_t2, input$col_pct),
+      get_val(core, input$r_t3, input$col_pct),
+      get_val(core, input$r_t4, input$col_pct),
+      get_val(idx, input$r_trials14, input$idx_col_pct),
+      get_val(core, input$r_sdfr, input$col_pct),
+      get_val(core, input$r_ldfr, input$col_pct),
+      get_val(core, input$r_ldcr, input$col_pct),
+      get_val(core, input$r_hits, input$col_pct),
+      get_val(core, input$r_fp, input$col_pct),
+      get_val(core, input$r_dprime, input$col_pct),
+      get_val(core, input$r_nonpar, input$col_pct),
+      get_val(core, input$r_intrus, input$col_pct),
+      get_val(proc, input$r_rep, input$proc_col_pct),
+      50 # Forced-choice default
+    )
+  )
+
+  # Join metadata
+  final <- results |>
+    left_join(meta, by = "scale") |>
+    mutate(
+      test = "cvlt3_brief",
+      test_name = "CVLT-3 Brief",
+      ci_95 = NA_character_,
+      range = NA_character_
+    )
+
+  # Apply ranges
+  if (
+    neuro2_available &&
+      exists("gpluck_make_score_ranges", where = asNamespace("neuro2"))
+  ) {
+    final <- neuro2::gpluck_make_score_ranges(final, test_type = "npsych_test")
+  }
+
+  final <- final |>
+    mutate(
+      result = ifelse(
+        !is.na(description) & !is.na(range),
+        paste0(description, " was ", range, "."),
+        NA_character_
+      )
+    ) |>
+    select(any_of(col_order))
+
+  rv$final <- final
+  showNotification(paste("Built", nrow(final), "scales"), type = "message")
+})
+
+output$final_tbl <- renderDT({
+  req(rv$final)
+  datatable(
+    rv$final,
+    options = list(scrollX = TRUE, pageLength = 20),
+    rownames = FALSE
+  )
+})
+
+output$dl <- downloadHandler(
+  filename = function() paste0("cvlt3_brief_", Sys.Date(), ".csv"),
+  content = function(file) {
+    write.csv(
+      rv$final %||% data.frame(error = "No data"),
+      file,
+      row.names = FALSE,
+      na = ""
+    )
+  }
+)
+```

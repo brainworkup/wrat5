@@ -1,0 +1,207 @@
+---
+title: "CVLT-3 Brief Extractor"
+format: 
+  html:
+    theme: cosmo
+server: shiny
+---
+
+```{r}
+#| context: setup
+#| include: false
+
+library(shiny)
+library(tidyverse)
+library(tabulapdf)
+library(DT)
+
+neuro2_available <- requireNamespace("neuro2", quietly = TRUE)
+if (neuro2_available) library(neuro2)
+
+options(shiny.maxRequestSize = 50 * 1024^2)
+
+# Exact column order from example CSV
+col_order <- c(
+ "scale","raw_score","score","percentile","range","ci_95",
+ "test","test_name","domain","subdomain","narrow",
+ "pass","verbal","timed","test_type","score_type","absort","description","result"
+)
+
+# 7 predefined areas (top, left, bottom, right) - FIXED for CVLT-3 Brief format
+areas <- list(
+  c(166, 52, 237, 560),  # 1: Learning Trials (4 rows)
+  c(159, 52, 185, 560),  # 2: Trials 1-4 Correct index
+  c(289, 52, 343, 560),  # 3: Delayed Recall (3 rows)
+  c(397, 52, 467, 560),  # 4: Recognition (4 rows)
+  c(520, 52, 544, 560),  # 5: Intrusions (1 row)
+  c(273, 52, 296, 560),  # 6: Repetitions (1 row)
+  c(597, 52, 619, 459)   # 7: Forced-Choice (1 row)
+)
+
+# Complete metadata matching example CSV exactly
+meta <- tribble(
+  ~scale, ~domain, ~subdomain, ~narrow, ~pass, ~verbal, ~timed, ~test_type, ~score_type, ~absort, ~description,
+  "Trial 1 Correct", "Memory", "Learning Efficiency", "Word-List Learning", "Sequential", "Verbal", "Untimed", "npsych_test", "scaled_score", "cvlt3_brief_trial 1 correct_1", "Correct number of words learned on the first trial",
+  "Trial 2 Correct", "Memory", "Learning Efficiency", "Word-List Learning", "Sequential", "Verbal", "Untimed", "npsych_test", "scaled_score", "cvlt3_brief_trial 2 correct_2", "Correct number of words learned on the second trial",
+  "Trial 3 Correct", "Memory", "Learning Efficiency", "Word-List Learning", "Sequential", "Verbal", "Untimed", "npsych_test", "scaled_score", "cvlt3_brief_trial 3 correct_3", "Correct number of words learned on the third trial",
+  "Trial 4 Correct", "Memory", "Learning Efficiency", "Word-List Learning", "Sequential", "Verbal", "Untimed", "npsych_test", "scaled_score", "cvlt3_brief_trial 4 correct_4", "Correct number of words learned on the fourth trial",
+  "Trials 1-4 Correct", "Memory", "Learning Efficiency", "Word-List Learning", "Sequential", "Verbal", "Untimed", "npsych_test", "standard_score", "cvlt3_brief_trials 1-4 correct_1", "Learning and recall of rote verbal information (word list)",
+  "Short Delay Free Recall", "Memory", "Delayed Recall", "Free-Recall Memory", "Sequential", "Verbal", "Untimed", "npsych_test", "scaled_score", "cvlt3_brief_short delay free recall_1", "Recall of the list after a short delay",
+  "Long Delay Free Recall", "Memory", "Delayed Recall", "Free-Recall Memory", "Sequential", "Verbal", "Untimed", "npsych_test", "scaled_score", "cvlt3_brief_long delay free recall_2", "Recall of the list after a long (20-minute) delay",
+  "Long Delay Cued Recall", "Memory", "Delayed Recall", "Free-Recall Memory", "Sequential", "Verbal", "Untimed", "npsych_test", "scaled_score", "cvlt3_brief_long delay cued recall_3", "Recall of the list after a long (20-minute) delay with cues",
+  "Total Hits", "Memory", "Delayed Recall", "Recognition Memory", "Sequential", "Verbal", "Untimed", "npsych_test", "scaled_score", "cvlt3_brief_total hits_1", "Yes/no recognition total hits",
+  "Total False Positives", "Memory", "Delayed Recall", "Recognition Memory", "Sequential", "Verbal", "Untimed", "npsych_test", "scaled_score", "cvlt3_brief_total false positives_2", "Yes/no recognition total false positives",
+  "Recognition Discriminability (d')", "Memory", "Delayed Recall", "Recognition Memory", "Sequential", "Verbal", "Untimed", "npsych_test", "scaled_score", "cvlt3_brief_recognition discriminability (d')_3", "Yes/no recognition discriminability",
+  "Recognition Discriminability Nonparametric", "Memory", "Delayed Recall", "Recognition Memory", "Sequential", "Verbal", "Untimed", "npsych_test", "scaled_score", "cvlt3_brief_recognition discriminability nonparametric_4", "Yes/no recognition discriminability (nonparametric)",
+  "CVLT-3 Total Intrusions", "Attention/Executive", "Attentional Functioning", "Response Monitoring", "Attention", "Verbal", "Untimed", "npsych_test", "scaled_score", "cvlt3_brief_cvlt-3 total intrusions_1", "Total number of intrusive response errors",
+  "CVLT-3 Total Repetitions", "Attention/Executive", "Attentional Functioning", "Response Monitoring", "Attention", "Verbal", "Untimed", "npsych_test", "scaled_score", "cvlt3_brief_cvlt-3 total repetitions_1", "Total number of repetitive response errors",
+  "CVLT-3 Forced-Choice Recognition Hits", "Performance Validity", "Cognitive Effort", "Forced-Choice Recognition Memory", "", "Verbal", "Untimed", "validity_indicator", "raw_score", "cvlt3_brief_cvlt-3 forced-choice recognition hits_1", "Number of hits on forced-choice recognition trials (raw score)"
+)
+
+# Which table contributes which scales (in order)
+table_scales <- list(
+  c("Trial 1 Correct", "Trial 2 Correct", "Trial 3 Correct", "Trial 4 Correct"),
+  c("Trials 1-4 Correct"),
+  c("Short Delay Free Recall", "Long Delay Free Recall", "Long Delay Cued Recall"),
+  c("Total Hits", "Total False Positives", "Recognition Discriminability (d')", "Recognition Discriminability Nonparametric"),
+  c("CVLT-3 Total Intrusions"),
+  c("CVLT-3 Total Repetitions"),
+  c("CVLT-3 Forced-Choice Recognition Hits")
+)
+```
+
+```{r}
+#| panel: sidebar
+
+fileInput("file", "Upload CVLT-3 Brief PDF", accept = ".pdf")
+
+hr()
+h5("Page Numbers Only")
+helpText("Areas are fixed. Adjust pages for your PDF.")
+
+numericInput("p1", "Table 1 (Learning):", value = 3, min = 1)
+numericInput("p2", "Table 2 (Trials 1-4 Index):", value = 7, min = 1)
+numericInput("p3", "Table 3 (Delayed):", value = 3, min = 1)
+numericInput("p4", "Table 4 (Recognition):", value = 3, min = 1)
+numericInput("p5", "Table 5 (Intrusions):", value = 3, min = 1)
+numericInput("p6", "Table 6 (Repetitions):", value = 9, min = 1)
+numericInput("p7", "Table 7 (Forced-Choice):", value = 3, min = 1)
+
+hr()
+selectInput("method", "Method:", c("stream", "lattice"), "stream")
+actionButton("go", "Extract", class = "btn-success btn-lg")
+downloadButton("dl", "Download CSV")
+```
+
+```{r}
+#| panel: fill
+
+verbatimTextOutput("status")
+tabsetPanel(
+  tabPanel("Raw Tables", uiOutput("raw_ui")),
+  tabPanel("Final CSV", DTOutput("final_tbl"))
+)
+```
+
+```{r}
+#| context: server
+
+safe_num <- function(x) suppressWarnings(as.numeric(gsub("[^0-9.-]", "", x)))
+
+rv <- reactiveValues(tables = NULL, final = NULL)
+
+pages <- reactive(c(input$p1, input$p2, input$p3, input$p4, input$p5, input$p6, input$p7))
+
+observeEvent(input$go, {
+  req(input$file)
+  pgs <- pages()
+  
+  withProgress(message = "Extracting 7 tables...", {
+    rv$tables <- lapply(1:7, function(i) {
+      incProgress(1/7, detail = paste("Table", i))
+      tryCatch({
+        res <- tabulapdf::extract_tables(
+          file = input$file$datapath,
+          pages = pgs[i],
+          area = list(areas[[i]]),
+          method = input$method,
+          guess = FALSE,
+          output = "data.frame"
+        )
+        if (length(res) > 0) res[[1]] else NULL
+      }, error = function(e) NULL)
+    })
+  })
+  
+  # Process tables
+  all_rows <- list()
+  
+  for (i in 1:7) {
+    df <- rv$tables[[i]]
+    scales <- table_scales[[i]]
+    if (is.null(df) || nrow(df) < length(scales)) next
+    
+    # Assume columns: Scale, Raw, Scaled, Percentile (adjust indices as needed)
+    nc <- ncol(df)
+    for (j in seq_along(scales)) {
+      row <- df[j, ]
+      all_rows[[length(all_rows) + 1]] <- tibble(
+        scale = scales[j],
+        raw_score = if (nc >= 2) safe_num(row[[2]]) else NA,
+        score = if (i == 7) NA else if (nc >= 3) safe_num(row[[3]]) else NA,
+        percentile = if (i == 7) 50 else if (nc >= 4) safe_num(row[[4]]) else NA
+      )
+    }
+  }
+  
+  if (length(all_rows) == 0) {
+    showNotification("No data extracted", type = "error")
+    return()
+  }
+  
+  result <- bind_rows(all_rows) |>
+    left_join(meta, by = "scale") |>
+    mutate(
+      test = "cvlt3_brief",
+      test_name = "CVLT-3 Brief",
+      ci_95 = NA_character_,
+      range = NA_character_
+    )
+  
+  # Apply ranges if neuro2 available
+  if (neuro2_available && exists("gpluck_make_score_ranges", where = asNamespace("neuro2"))) {
+    result <- neuro2::gpluck_make_score_ranges(result, test_type = "npsych_test")
+  }
+  
+  result <- result |>
+    mutate(result = ifelse(!is.na(description) & !is.na(range),
+                           paste0(description, " was ", range, "."), NA_character_)) |>
+    select(any_of(col_order))
+  
+  rv$final <- result
+})
+
+output$status <- renderText({
+  n <- if (!is.null(rv$tables)) sum(!sapply(rv$tables, is.null)) else 0
+  f <- if (!is.null(rv$final)) nrow(rv$final) else 0
+  paste0("Tables extracted: ", n, "/7 | Scales: ", f, "/15")
+})
+
+output$raw_ui <- renderUI({
+  req(rv$tables)
+  tabs <- lapply(1:7, function(i) {
+    tabPanel(paste("T", i), renderDT(datatable(rv$tables[[i]], options = list(scrollX = TRUE))))
+  })
+  do.call(tabsetPanel, tabs)
+})
+
+output$final_tbl <- renderDT({
+  req(rv$final)
+  datatable(rv$final, options = list(scrollX = TRUE, pageLength = 20), rownames = FALSE)
+})
+
+output$dl <- downloadHandler(
+  filename = function() paste0("cvlt3_brief_", Sys.Date(), ".csv"),
+  content = function(file) write.csv(rv$final, file, row.names = FALSE, na = "")
+)
+```

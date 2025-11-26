@@ -9,7 +9,7 @@ patient <- "Biggie"
 
 test <- "wais5_index"
 test_name <- "WAIS-5"
-pages <- c(21)
+pages <- c(2)
 extract_columns <- c(1, 3, 4, 5, 6)
 variables <- c("scale", "raw_score", "score", "percentile", "ci_95")
 score_type <- "standard_score"

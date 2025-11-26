@@ -1,20 +1,18 @@
-# Extract Subtest Tables
-library(neuro2)
+# Extract Areas - General
 
-# do this first
 # Patient name ----------------------------------------------------------
 
 patient <- "Biggie"
 
-# WAIS-5 Parameters Subtest --------------------------------------------
+# WAIS-5 Parameters - Index Scores --------------------------------------
+# do this second
 
-# WAIS-5 subtests
-test <- "wais5_subtest"
+test <- "wais5_index"
 test_name <- "WAIS-5"
-pages <- c(4, 4, 4, 4)
-extract_columns <- c(2, 4, 5, 6)
-variables <- c("scale", "raw_score", "score", "percentile")
-score_type <- "scaled_score"
+pages <- c(2)
+extract_columns <- c(1, 3, 4, 5, 6)
+variables <- c("scale", "raw_score", "score", "percentile", "ci_95")
+score_type <- "standard_score"
 
 # File path -------------------------------------------------------------
 
@@ -37,6 +35,7 @@ params <- list(
 
 # Extract Areas function --------------------------------------------------
 
+# Extracted areas
 extracted_areas <- tabulapdf::extract_areas(
   file = file_path,
   pages = pages,
@@ -45,11 +44,15 @@ extracted_areas <- tabulapdf::extract_areas(
   copy = TRUE
 )
 
+# Loop and Save ---------------------------------------------------------
+
 # Save the entire list to an R data file
 saveRDS(extracted_areas, file = paste0(test, "_extracted_areas.rds"))
-
 # Load the list from the R data file (if necessary)
 extracted_areas <- readRDS(paste0(test, "_extracted_areas.rds"))
+
+# Check the extracted areas
+str(extracted_areas)
 
 # Loop over the list and write each matrix to a CSV file
 for (i in seq_along(extracted_areas)) {
@@ -60,14 +63,22 @@ for (i in seq_along(extracted_areas)) {
   )
 }
 
-# Check the extracted areas
-str(extracted_areas)
-
 # To convert a single test using extracted areas into a single data frame
-df <- as.data.frame(extracted_areas[[1]])
+df1 <- as.data.frame(extracted_areas[[1]])
+# df2 <- as.data.frame(extracted_areas[[2]])
 
-# Remove parentheses (wais5, wais5 subtests)
+# df <- as.data.frame(rbind(df1, df2))
+df <- df1
+
+# # Remove parentheses (wais5 subtests)
 df <- df |> dplyr::mutate(V2 = stringr::str_remove_all(V2, "\\(|\\)"))
+
+# For Wechsler Indexes
+# Merge Columns 1-2 and add parentheses
+library(tidyverse)
+df <- df |>
+  dplyr::mutate(col2_paren = paste0("(", df[[2]], ")")) |>
+  tidyr::unite("scale", 1, col2_paren, sep = " ", remove = TRUE)
 
 # FUNCTIONS ---------------------------------------
 
@@ -92,7 +103,7 @@ colnames(df) <- params$variables
 # Step 1: Replace "-" with NA in the entire dataframe
 df[df == "-"] <- NA
 
-# Step 2: Convert 'raw score' 'score' and 'percentile' to numeric
+# Step 2 (Optional): Convert 'raw score' 'score' and 'percentile' to numeric
 df <- df |>
   dplyr::mutate(
     raw_score = as.numeric(raw_score),
@@ -104,26 +115,6 @@ df <- df |>
 df <- df |>
   dplyr::filter(!is.na(score) & !is.na(percentile)) |>
   dplyr::distinct()
-
-# Function to calculate 95% CI if needed ----------------------------------
-
-# Assuming df is your data.frame and calc_ci_95 is your function
-for (i in seq_len(nrow(df))) {
-  ci_values <- neuro2::calc_ci_95(
-    ability_score = df$score[i],
-    mean = 10, # change to 50, 0, 100, etc.
-    standard_deviation = 3, # change to 10, 1, 15, etc.
-    reliability = .90
-  )
-  df$true_score[i] <- ci_values["true_score"]
-  df$ci_lo[i] <- ci_values["lower_ci_95"]
-  df$ci_hi[i] <- ci_values["upper_ci_95"]
-  df$ci_95[i] <- paste0(ci_values["lower_ci_95"], "-", ci_values["upper_ci_95"])
-}
-
-df <- df |>
-  dplyr::select(-c(true_score, ci_lo, ci_hi)) |>
-  dplyr::relocate(ci_95, .after = score)
 
 # Lookup Table Match ------------------------------------------------------
 
@@ -184,10 +175,55 @@ df <- df_mutated |>
   dplyr::select(-description) |>
   dplyr::relocate(absort, .after = result)
 
-wais5_subtest <- df
-
-w2 <- as.data.frame(wais5_subtest)
+wais5_index <- df
 
 # Save csv ----------------------------------------------------------------
 
-readr::write_excel_csv(w2, "data-raw/wais5_subtest.csv")
+w1 <- wais5_index
+readr::write_excel_csv(w1, "data-raw/wais5_index.csv")
+
+# Write out final csv --------------------------------------------------
+
+w1 <- wais5_index
+w2 <- wais5_subtest
+# w3 <- wais5_process
+
+wais5 <- data.frame(rbind(w1, w2))
+
+test <- "wais5"
+readr::write_excel_csv(
+  wais5,
+  here::here("data-raw", "csv", paste0(test, ".csv")),
+  col_names = TRUE
+)
+
+# Write to "g.csv" file --------------------------------------------------
+
+has_headers <- function(file_path) {
+  if (!file.exists(file_path)) {
+    return(FALSE) # File doesn't exist, headers are needed
+  }
+  # Check if the file has at least one line (header)
+  return(length(readLines(file_path, n = 1)) > 0)
+}
+
+csv_file <- wais5
+g <- "g"
+file_path <- here::here("data-raw", paste0(g, ".csv"))
+
+readr::write_excel_csv(
+  csv_file,
+  file_path,
+  append = TRUE,
+  col_names = !has_headers(file_path),
+  quote = "all"
+)
+
+# Print message indicating completion
+cat(
+  "Data for",
+  test,
+  "has been successfully processed and saved to",
+  file_path,
+  "\n"
+)
